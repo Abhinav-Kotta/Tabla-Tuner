@@ -1,0 +1,1 @@
+- [Browser audio MVPs](browser-audio-mvp.md) — gate live microphone frames with onset, confidence, and consistency checks before surfacing measurements.

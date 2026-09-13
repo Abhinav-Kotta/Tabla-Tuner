@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Dayan Tabla Tuner"
+description = "A desktop-first browser tuner for dayan tabla players that analyzes isolated strikes around the drum head and visualizes tuning consistency across eight regions."
+version = "1.0.0"
+id = "artifacts/dayan-tuner"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25596
+
+[services.development]
+run = "pnpm --filter @workspace/dayan-tuner run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/dayan-tuner", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/dayan-tuner/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25596"
+BASE_PATH = "/"
