@@ -758,3 +758,26 @@ button { cursor: pointer; }
   .guide-story-visual, .guide-story-visual .guide-photo-ring, .guide-story-visual .guide-region-dial { animation: none; }
   .guide-story-step, .guide-story-progress span { transition: none; }
 }
+
+/* Layout guardrails for the visual stage: keep diagrams centered and copy in its own column. */
+.guide-scroll-story { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1180px; margin-inline: auto; }
+.guide-story-visual-wrap, .guide-story-visual-sticky, .guide-story-visual, .guide-story-copy { min-width: 0; width: 100%; }
+.guide-story-visual-wrap { overflow: visible; }
+.guide-story-visual-sticky { z-index: 2; isolation: isolate; }
+.guide-story-visual { box-sizing: border-box; align-items: center; justify-content: center; text-align: center; }
+.guide-story-visual > * { flex: 0 0 auto; max-width: 100%; }
+.guide-story-copy { position: relative; z-index: 1; overflow: visible; }
+.guide-story-step { max-width: 640px; margin-inline: auto; overflow-wrap: anywhere; }
+.guide-story-step h3, .guide-story-step p { overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+  .guide-scroll-story { gap: clamp(24px, 4vw, 56px); }
+}
+@media (max-width: 960px) {
+  .guide-scroll-story { grid-template-columns: minmax(0, 1fr); }
+  .guide-story-visual { max-width: 720px; margin-inline: auto; }
+  .guide-story-copy { width: min(100%, 720px); margin-inline: auto; }
+}
+@media (max-width: 720px) {
+  .guide-hero { flex-direction: column; align-items: flex-start; }
+  .guide-hero-mark { margin-top: 20px; }
+}
