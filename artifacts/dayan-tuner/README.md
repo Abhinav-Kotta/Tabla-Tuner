@@ -22,10 +22,12 @@ The app is a single browser session. It does not create accounts, send audio to 
 - `src/App.tsx` owns the session workflow and presentation state.
 - `src/audio/musicTheory.ts` contains equal-temperament note/frequency conversion and cents calculations.
 - `src/audio/onsetDetection.ts` adapts a room-noise floor and applies a strike cooldown.
-- `src/audio/pitchDetection.ts` estimates the fundamental with normalized autocorrelation, harmonic agreement, and a confidence score.
+- `src/audio/pitchDetection.ts` estimates the fundamental with normalized autocorrelation, bounded repeated-period agreement, and a confidence score.
 - `src/audio/microphone.ts` owns the Web Audio API stream and throttles browser frames into the UI.
 - `src/audio/signalUtils.ts` contains reusable signal operations such as RMS, median, windowing, and autocorrelation.
 - `src/vision/tablaDetection.ts` scores circular head boundaries and creates a square crop with uniform scaling for overlay alignment.
+
+For a line-by-line Python version of the audio math, see `../../docs/pitch_detection_reference.py`. It is a teaching/reference implementation; the browser still runs the TypeScript modules above.
 
 ## Tabla-head detection
 
@@ -52,11 +54,22 @@ Uploads and **Take photo** use the same local processing. Take photo requests th
 
 Run the photo geometry and anchor mapping regression checks with `node --test artifacts/dayan-tuner/src/vision/*.test.mjs` from the workspace root.
 
+For a quick local verification pass from the workspace root:
+
+```bash
+PORT=4173 BASE_PATH=/ pnpm --filter @workspace/dayan-tuner typecheck
+PORT=4173 BASE_PATH=/ pnpm --filter @workspace/dayan-tuner build
+node --test artifacts/dayan-tuner/src/vision/*.test.mjs
+python3 -m py_compile docs/pitch_detection_reference.py
+```
+
 The manual **Stop microphone** action scrolls to the results section and moves keyboard focus there. Scrolling respects reduced-motion preferences. Starting a new measurement stops audio without scrolling to the old results.
 
 ## Pitch detection
 
 Tabla has strong harmonic partials. Selecting the strongest FFT peak can return the second harmonic instead of the perceived fundamental. The detector therefore searches for repeating waveform periods using normalized autocorrelation. Each candidate period is also checked for agreement at two and three times the period, which favors a fundamental whose harmonic family repeats consistently.
+
+Here, `harmonicAgreement` is shorthand for repeated-period evidence in the time domain: the detector samples autocorrelation at `2 × lag` and `3 × lag`. Those are two and three repetitions of the candidate period, not literal frequency-domain bins at `2f` and `3f`. A check is included only when its lag exists inside the search range. If it does not fit, it is omitted and the remaining weights are renormalized; clamping it to the final search bin would count unrelated evidence twice.
 
 The returned result contains:
 
@@ -65,11 +78,15 @@ The returned result contains:
 - `correlation`: the best normalized autocorrelation strength
 - `harmonicAgreement`: support from the second and third harmonic periods
 
-The first attack transient can be noisy, so the current MVP uses the live analysis frame after onset detection as a practical short window. A later version can add a delayed resonant-window buffer and more explicit spectral consistency checks.
+The onset detector identifies the beginning of a strike from RMS level. The UI then collects pitch results for 180 ms instead of trusting only the onset frame. Valid frame frequencies and confidences are aggregated with medians before the strike is accepted. This short capture window is a compromise: it includes the early resonant sound while avoiding a long window that could include another strike or changing room noise.
+
+The browser displays both the measured frequency and `frequencyToNoteName(frequency)`. The note label uses A4 = 440 Hz equal temperament and is rounded to the nearest semitone; it is useful for orientation, while the cents value preserves the finer tuning error.
 
 ## Harmonic validation
 
 Each region requires three accepted strikes. Low-confidence estimates are rejected. Once a region has one or more strikes, a new estimate is compared with the current median in cents. Estimates more than 80 cents away are treated as inconsistent and do not advance the counter. A completed region uses the median of its three frequencies, which prevents a single outlier from pulling the result toward an octave.
+
+The `averageFrequency` property name remains for UI/data compatibility, but after completion it contains the median of the three accepted strike frequencies rather than an arithmetic average.
 
 ## Cents and status
 
@@ -97,7 +114,8 @@ Sharp/flat direction is shown separately in the inspector row and guidance text 
 
 - Detection is optimized for a clear, nearly overhead photograph. Manual center, size, and rotation controls are available; perspective correction for tilted photos is not.
 - Audio analysis is local to the browser and is designed for one isolated strike at a time in a quiet room.
-- The current window uses the analyser frame that contains the onset; a future pass can add delayed resonant-window selection.
+- The current 180 ms capture window is fixed; a future pass can compare multiple delayed resonant windows or adapt the window to the strike envelope.
+- The detector is a readable autocorrelation MVP. YIN, McLeod Pitch Method, or an FFT/cepstrum cross-check may improve difficult, noisy, or highly inharmonic strikes.
 - The MVP supports dayan only and does not include bayan tuning, persistence, exports, or session history.
 - Microphone access requires a secure browser context and user permission.
 

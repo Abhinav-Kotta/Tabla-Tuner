@@ -14,7 +14,7 @@ An in-browser dayan tuner that uses local image and microphone analysis to map p
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
+- pnpm workspaces, Node.js 22.18.0 (the version in `.nvmrc`), TypeScript 5.9
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
@@ -27,17 +27,32 @@ An in-browser dayan tuner that uses local image and microphone analysis to map p
 - `artifacts/dayan-tuner/src/audio/` — music theory, onset, microphone, and pitch analysis
 - `artifacts/dayan-tuner/src/vision/tablaDetection.ts` — local head detection and normalization
 - `artifacts/dayan-tuner/README.md` — product and DSP/CV notes
+- `docs/pitch_detection_reference.py` — dependency-free Python walkthrough of the browser pitch pipeline
+- `docs/pitch-detection-topics.md` — study guide for the signal-processing concepts used by the app
 
 ## Architecture decisions
 
 - Audio and image analysis are client-side only; no backend is needed for a single-use session.
-- Three accepted strikes are combined with a median rather than a plain average to reduce outlier influence.
+- Each onset opens a short 180 ms capture window. Valid pitch frames within that window are combined with medians, and three completed strikes are combined with another median to reduce outlier influence.
+- Repetition evidence is evaluated only when the two- or three-period lag is inside the search range; unavailable checks are omitted rather than clamped to a misleading boundary bin.
+- The measured Hz value is converted to the nearest equal-tempered note for the readout, while cents deviation remains the authoritative tuning comparison against the user-selected target.
 - Wedges are rendered from normalized circular geometry, not rectangular image blocks, so the overlay stays aligned to the detected head.
 - The UI keeps sharp/flat direction in text and uses heat colors for distance from target, so color is not the only status signal.
 
 ## Product
 
 Users upload a dayan photo, choose a C3-B4 target note, grant microphone access, measure three strikes in each of eight angular regions, inspect an abstract heat map or photo overlay, and re-measure regions with deterministic sharp/flat guidance.
+
+## Verification
+
+```bash
+PORT=4173 BASE_PATH=/ pnpm --filter @workspace/dayan-tuner typecheck
+PORT=4173 BASE_PATH=/ pnpm --filter @workspace/dayan-tuner build
+node --test artifacts/dayan-tuner/src/vision/*.test.mjs
+python3 -m py_compile docs/pitch_detection_reference.py
+```
+
+The Python file is a learning aid and parity reference for the browser's TypeScript audio pipeline; it is not imported into the production bundle.
 
 ## User preferences
 
@@ -47,6 +62,7 @@ Users upload a dayan photo, choose a C3-B4 target note, grant microphone access,
 
 - Browser microphone access needs a secure context and explicit permission.
 - The photo detector is designed for a complete, mostly overhead head image; unclear images should surface a retry message instead of guessing silently.
+- The displayed note label is a communication aid, not a replacement for the selected target. Change the target note explicitly when tuning to a different tonic.
 
 ## Pointers
 
