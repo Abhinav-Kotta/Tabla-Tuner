@@ -1,15 +1,19 @@
 # Dayan Tabla Tuner
 
-Dayan Tabla Tuner is a desktop-first browser utility for tabla players who want to check whether pitch is carried evenly around the dayan head. It uses a top-down photo to normalize the drum head, listens for isolated strikes through the browser microphone, estimates the fundamental pitch, and presents an eight-region tuning map.
+Dayan Tabla Tuner is a desktop-first browser utility for tabla players who want to check whether pitch is carried evenly around the dayan head. It uses a top-down photo to align the drum head, listens for isolated strikes through the browser microphone, estimates the fundamental pitch, and presents an eight-region tuning map.
 
 ## Run locally
 
 From the workspace root:
 
 ```bash
+nvm install
+nvm use
 pnpm install
-pnpm --filter @workspace/dayan-tuner run dev
+PORT=5173 BASE_PATH=/ pnpm --filter @workspace/dayan-tuner run dev
 ```
+
+Open http://localhost:5173. The root `.nvmrc` selects Node 22.18.0; Vite requires Node 20.19+ or 22.12+.
 
 The app is a single browser session. It does not create accounts, send audio to a server, or persist a photo after refresh.
 
@@ -21,13 +25,34 @@ The app is a single browser session. It does not create accounts, send audio to 
 - `src/audio/pitchDetection.ts` estimates the fundamental with normalized autocorrelation, harmonic agreement, and a confidence score.
 - `src/audio/microphone.ts` owns the Web Audio API stream and throttles browser frames into the UI.
 - `src/audio/signalUtils.ts` contains reusable signal operations such as RMS, median, windowing, and autocorrelation.
-- `src/vision/tablaDetection.ts` performs lightweight local ellipse scoring and creates a normalized square crop for overlay alignment.
+- `src/vision/tablaDetection.ts` scores circular head boundaries and creates a square crop with uniform scaling for overlay alignment.
 
 ## Tabla-head detection
 
-The upload is drawn to a small processing canvas, then a family of circular candidates is scored by the contrast observed across their perimeter. The strongest candidate supplies the center and radii. The image is then cropped to that geometry and rendered into a square canvas. The same normalized coordinate system is used for the tuning wedges, so the overlay does not drift when the input photo has a different resolution.
+The upload is drawn to a small processing canvas, then a family of circular candidates is scored by the contrast observed across their perimeter. The strongest candidate supplies an initial center and circular radius in source-image coordinates. A square crop is rendered with one scale for both axes, preserving proportions for portrait and landscape photos. The image and tuning wedges share the same head boundary. The detector is a starting estimate; users can adjust the horizontal and vertical center, head size, and photo rotation. If detection fails, a centered crop remains available for manual alignment.
 
 This is intentionally a conventional, readable computer-vision pass rather than a machine-learning model. It works best with a clear, nearly top-down photograph where the complete head is visible.
+
+## Photo orientation and region mapping
+
+Photo setup opens automatically in a modal when an image finishes loading. The preview stays visible alongside the active controls on desktop and above them on mobile. The current instruction, placement feedback, and errors use prominent, high-contrast text. The action footer remains visible; optional fine controls expand separately. Closing setup preserves progress; **Continue photo setup** reopens it. Saving the map closes the modal and enables measurement.
+
+Photo setup has four steps:
+
+1. **Fit photo:** drag with a mouse or finger inside the fixed overlay. Pinch with two fingers, scroll the mouse wheel/trackpad over the photo, use the +/− buttons, or move the zoom slider. These controls share a 25–500% zoom range. Pinching preserves the source point under the moving midpoint even after rotation. Arrow keys pan the focused photo; +/− keys zoom. Fine center sliders and reset are also available. A live canvas redraws the original image without re-encoding a JPEG on each movement. Scaling always preserves proportions.
+2. **Orientation anchor:** tap and name a unique mark, logo, or colored tape visible on the real tabla. Repeated identical straps are not useful orientation references. The cyan diamond (A) identifies this mark; it can be anywhere off-center within the photo and need not lie inside R1. It does not define a strap boundary, region center, or region width.
+3. **Boundary straps:** select strap 1 at the start of R1, then strap 3 at its clockwise end, with strap 2 between them. Both selected edges are preserved. The remaining circumference is divided into seven estimated regions. Review the numbered boundary pins against the photo; choose any boundary in the controls and tap the correct strap or use the fine-adjustment slider. Changes keep neighboring regions joined and prevent boundary crossings. Confirm the map before measuring.
+4. **Measure:** R1 spans straps 1–3, R2 spans 3–5, and so on; R8 spans 15–1 (including strap 16). Adjacent regions share their boundary strap, so each region includes three straps. The map, marker positions, table, and tuning guidance use the same calibrated boundaries. Microphone measurement requires both a confirmed anchor and region map.
+
+Autofill estimates the unselected straps geometrically; it does not detect straps in the image. Uneven spacing or perspective may require corrections during review. The selected R1 arc must span 10–100 degrees clockwise; this rejects duplicate or reversed selections. Boundary corrections retain at least 5 degrees between adjacent edges.
+
+Photo edits clear the anchor and boundaries and require setup again. Changing the orientation anchor preserves the boundary map and region sizes. Strap selection never moves the anchor. Photo and anchor changes lock while the microphone is starting/listening or strikes exist; stop the microphone and reset measurements to edit. Resetting measurements alone preserves the anchor and boundary map for another pass. Replacing the image clears the anchor, its name, and the boundaries. The app does not track the instrument: if it moves, locate the named physical mark again before following the numbered regions.
+
+Uploads and **Take photo** use the same local processing. Take photo requests the rear camera on supporting mobile browsers; desktop browsers may show a file picker. Camera capture is optional and does not correct perspective: include the whole head with the camera directly overhead and parallel to it.
+
+Run the photo geometry and anchor mapping regression checks with `node --test artifacts/dayan-tuner/src/vision/*.test.mjs` from the workspace root.
+
+The manual **Stop microphone** action scrolls to the results section and moves keyboard focus there. Scrolling respects reduced-motion preferences. Starting a new measurement stops audio without scrolling to the old results.
 
 ## Pitch detection
 
@@ -70,7 +95,7 @@ Sharp/flat direction is shown separately in the inspector row and guidance text 
 
 ## Current MVP limitations
 
-- Detection is optimized for a clear, nearly overhead photograph and does not provide manual ellipse editing.
+- Detection is optimized for a clear, nearly overhead photograph. Manual center, size, and rotation controls are available; perspective correction for tilted photos is not.
 - Audio analysis is local to the browser and is designed for one isolated strike at a time in a quiet room.
 - The current window uses the analyser frame that contains the onset; a future pass can add delayed resonant-window selection.
 - The MVP supports dayan only and does not include bayan tuning, persistence, exports, or session history.
