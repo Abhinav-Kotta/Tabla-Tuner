@@ -6,7 +6,7 @@ with a normal Python installation.
 """
 
 from dataclasses import dataclass
-from math import ceil, cos, floor, isfinite, log2, pi, sqrt
+from math import ceil, floor, isfinite, log2, sqrt
 from statistics import median
 from time import perf_counter
 
@@ -47,14 +47,17 @@ def normalized_autocorrelation(
     """Compare a signal with delayed copies of itself for each candidate lag."""
 
     output = [0.0] * (max_lag + 1)
+    total_energy = sum(sample * sample for sample in samples)
+    if total_energy <= 0:
+        return output
+
     for lag in range(min_lag, max_lag + 1):
         pairs = len(samples) - lag
         if pairs <= 0:
             continue
         numerator = sum(samples[index] * samples[index + lag] for index in range(pairs))
-        left_energy = sum(samples[index] ** 2 for index in range(pairs))
         right_energy = sum(samples[index + lag] ** 2 for index in range(pairs))
-        denominator = sqrt(left_energy * right_energy)
+        denominator = sqrt(total_energy * right_energy)
         output[lag] = numerator / denominator if denominator else 0.0
     return output
 
