@@ -55,6 +55,16 @@ type Region = {
   confidence: number;
 };
 
+type StrikePitchSample = {
+  frequency: number;
+  confidence: number;
+};
+
+type StrikeCapture = {
+  startedAt: number;
+  samples: StrikePitchSample[];
+};
+
 const REGIONS: Region[] = Array.from({ length: 8 }, (_, index) => ({
   id: index + 1,
   label: `Straps ${strapRange(index + 1)}${index === 0 ? ' · anchored region' : ''}`,
@@ -67,6 +77,7 @@ const REGIONS: Region[] = Array.from({ length: 8 }, (_, index) => ({
 
 const TARGET_TOLERANCES = [3, 5, 10, 15];
 const MAX_STRIKE_VARIANCE_CENTS = 80;
+const STRIKE_CAPTURE_WINDOW_MS = 180;
 
 function freshRegions(): Region[] {
   return REGIONS.map((region) => ({ ...region, strikes: [] }));
@@ -148,6 +159,7 @@ function TunerConsole() {
   const [noiseFloor, setNoiseFloor] = useState(0);
   const streamRef = useRef<MicrophoneHandle | null>(null);
   const onsetRef = useRef(new OnsetDetector());
+  const strikeCaptureRef = useRef<StrikeCapture | null>(null);
   const lastFrameUiUpdateRef = useRef(0);
   const regionsRef = useRef(regions);
   const currentRegionRef = useRef(currentRegion);
@@ -156,6 +168,9 @@ function TunerConsole() {
 
   const targetHz = useMemo(() => noteNameToFrequency(targetNote), [targetNote]);
   const selectedRegion = regions.find((region) => region.id === currentRegion) ?? regions[0];
+  const measuredFrequency = selectedRegion.averageFrequency;
+  const measuredNote = measuredFrequency == null ? '—' : frequencyToNoteName(measuredFrequency);
+  const measuredCents = measuredFrequency == null ? Number.NaN : centsDifference(measuredFrequency, targetHz);
   const hoveredOrSelected = hoveredRegion ?? currentRegion;
   const completedCount = regions.filter((region) => region.averageFrequency != null).length;
   const tunedCount = regions.filter((region) => getRegionStatus(region, targetHz, tolerance) === 'in-tune').length;
@@ -244,6 +259,25 @@ function TunerConsole() {
       setMessage('All eight regions captured. Review the heat map and adjust any warm regions.');
     }
   }, []);
+
+  const finalizeStrikeCapture = useCallback(() => {
+    const capture = strikeCaptureRef.current;
+    if (!capture) return;
+
+    strikeCaptureRef.current = null;
+    if (capture.samples.length === 0) {
+      setRejectedCount((count) => count + 1);
+      setMessage('Pitch unclear. Strike the highlighted area again.');
+      return;
+    }
+
+    // A strike produces several frames. Median aggregation keeps one noisy
+    // frame from moving the accepted measurement or creating an octave jump.
+    processPitch(
+      median(capture.samples.map((sample) => sample.frequency)),
+      median(capture.samples.map((sample) => sample.confidence)),
+    );
+  }, [processPitch]);
 
   const updatePhotoGeometry = (next: HeadGeometry) => {
     if (alignmentLocked || !sourceImageRef.current) return;
@@ -379,6 +413,7 @@ function TunerConsole() {
   const stopMicrophone = useCallback((showResults = false) => {
     streamRef.current?.stop();
     streamRef.current = null;
+    strikeCaptureRef.current = null;
     onsetRef.current.reset();
     setInputLevel(0);
     setNoiseFloor(0);
@@ -405,14 +440,21 @@ function TunerConsole() {
           setInputLevel(frame.level);
           setNoiseFloor(onset.noiseFloor);
         }
+
         if (onset.detected) {
+          strikeCaptureRef.current = { startedAt: now, samples: [] };
+        }
+
+        const capture = strikeCaptureRef.current;
+        if (!capture) return;
+
+        if (now - capture.startedAt <= STRIKE_CAPTURE_WINDOW_MS) {
           const pitch = estimatePitch(frame.samples, frame.sampleRate);
           if (pitch.frequency != null) {
-            processPitch(pitch.frequency, pitch.confidence);
-          } else {
-            setRejectedCount((count) => count + 1);
-            setMessage('Pitch unclear. Strike the highlighted area again.');
+            capture.samples.push({ frequency: pitch.frequency, confidence: pitch.confidence });
           }
+        } else {
+          finalizeStrikeCapture();
         }
       });
       streamRef.current = handle;
@@ -428,6 +470,7 @@ function TunerConsole() {
     const next = freshRegions();
     regionsRef.current = next;
     currentRegionRef.current = 1;
+    strikeCaptureRef.current = null;
     onsetRef.current.reset();
     setRegions(next);
     setCurrentRegion(1);
@@ -580,7 +623,7 @@ function TunerConsole() {
                 <div className="space-y-5 p-5">
                   <div><label htmlFor="target-note" className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]"><span>Target note</span><span className="text-[#d6a354]">A4 = 440 Hz</span></label><div className="relative"><select id="target-note" data-testid="select-target-note" value={targetNote} onChange={(event) => { setTargetNote(event.target.value); setMessage('Target updated. Existing region measurements remain available for comparison.'); }} className="w-full appearance-none border border-[#39414b] bg-[#1c2026] px-3 py-3 text-[13px] font-semibold text-[#e4e7ea] outline-none transition focus:border-[#d6a354]">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 text-[#8b94a0]" size={15} /></div></div>
                   <div><label className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]"><span>In tune tolerance</span><span className="text-[#d6a354]">cents</span></label><div className="grid grid-cols-4 border border-[#39414b] bg-[#1c2026] p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} data-testid={`button-tolerance-${value}`} onClick={() => setTolerance(value)} className={`py-2 font-mono text-[10px] ${tolerance === value ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691] hover:text-[#d9dde4]'}`}>±{value}¢</button>)}</div></div>
-                  <div className="border border-[#303742] bg-[#1b1f25] p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-[#6f7884]">Selected region</span><span data-testid="text-selected-region" className="font-mono text-[10px] uppercase tracking-[.12em] text-[#d6a354]">Region {selectedRegion.id} / {selectedRegion.label}</span></div><div className="flex items-end justify-between"><div><span data-testid="text-measured-frequency" className="font-mono text-[33px] leading-none text-[#e8ebed]">{formatHz(selectedRegion.averageFrequency)}</span><span className="ml-2 font-mono text-[11px] text-[#717a86]">Hz</span></div><div className="text-right"><span className="block font-mono text-[10px] text-[#6e7783]">target</span><span data-testid="text-target-frequency" className="font-mono text-[12px] text-[#c6cdd5]">{formatHz(targetHz)} Hz</span></div></div><div className="mt-4 h-1 bg-[#2d333b]"><div className="h-full bg-[#d6a354] transition-[width]" style={{ width: `${selectedRegion.averageFrequency == null ? 4 : Math.min(100, Math.max(4, 100 - Math.abs(centsDifference(selectedRegion.averageFrequency, targetHz)) * 1.4))}%` }} /></div></div>
+                  <div className="border border-[#303742] bg-[#1b1f25] p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-[#6f7884]">Selected region</span><span data-testid="text-selected-region" className="font-mono text-[10px] uppercase tracking-[.12em] text-[#d6a354]">Region {selectedRegion.id} / {selectedRegion.label}</span></div><div className="flex items-end justify-between gap-4"><div><span className="block font-mono text-[9px] uppercase tracking-[.14em] text-[#6e7783]">Detected note</span><span data-testid="text-measured-note" className="font-mono text-[33px] leading-none text-[#e8ebed]">{measuredNote}</span><span data-testid="text-measured-frequency" className="ml-2 font-mono text-[11px] text-[#717a86]">{formatHz(measuredFrequency)} Hz</span></div><div className="text-right"><span className="block font-mono text-[10px] uppercase tracking-[.12em] text-[#6e7783]">target {targetNote}</span><span data-testid="text-target-frequency" className="block font-mono text-[12px] text-[#c6cdd5]">{formatHz(targetHz)} Hz</span><span data-testid="text-measured-cents" className="mt-1 block font-mono text-[12px] text-[#edc17b]">{formatCents(measuredCents)}</span></div></div><div className="mt-4 h-1 bg-[#2d333b]"><div className="h-full bg-[#d6a354] transition-[width]" style={{ width: `${measuredFrequency == null ? 4 : Math.min(100, Math.max(4, 100 - Math.abs(measuredCents) * 1.4))}%` }} /></div></div>
                   <div><div className="mb-2 flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]">Input monitor</span><span className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-[.12em] ${micState === 'ready' ? 'text-[#82c8a0]' : 'text-[#737c88]'}`}><span className={`h-1.5 w-1.5 rounded-full ${micState === 'ready' ? 'meter-pulse bg-[#82c8a0]' : 'bg-[#555d68]'}`} />{micState === 'ready' ? 'listening' : 'offline'}</span></div><div className="flex h-12 items-center gap-[3px] border border-[#303640] bg-[#12151a] px-3">{Array.from({ length: 42 }).map((_, index) => <span key={index} className={`w-[2px] ${micState === 'ready' ? 'bg-[#4f8e78]' : 'bg-[#343b45]'}`} style={{ height: `${micState === 'ready' ? `${Math.max(4, Math.min(39, inputLevel * 340 + ((index * 5) % 8)))}px` : `${6 + ((index * 7) % 8)}px`}`, opacity: micState === 'ready' ? .55 + ((index % 4) * .1) : .7 }} />)}</div><p className="mt-1 font-mono text-[9px] text-[#626b76]">Noise floor {noiseFloor.toFixed(3)}</p></div>
                   <button data-testid="button-microphone-access" onClick={() => micState === 'ready' ? stopMicrophone(true) : void requestMicrophone()} disabled={micState === 'requesting' || (!photoReady && micState !== 'ready')} className={`flex w-full items-center justify-center gap-2 border px-3 py-3 font-mono text-[10px] uppercase tracking-[.13em] transition ${micState === 'ready' ? 'border-[#b75a4b]/50 bg-[#321f20] text-[#e6aaa2] hover:border-[#d57b70]' : 'border-[#39414a] bg-[#22272f] text-[#d6dce3] hover:border-[#d6a354]/60 hover:text-[#e6b970]'} disabled:cursor-not-allowed disabled:opacity-60`}>{micState === 'ready' ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}{micState === 'requesting' ? 'Requesting access…' : micState === 'ready' ? 'Stop microphone' : micState === 'denied' ? 'Retry microphone access' : !photoReady ? 'Confirm the region map to start' : 'Start microphone'}</button>
                   <div className="flex items-start gap-2 border-t border-[#292f38] pt-4 text-[10px] leading-4 text-[#69727e]"><Info size={13} className="mt-0.5 shrink-0 text-[#8d7551]" /><span>{micState === 'ready' ? 'Microphone is active. Stop it when you are done; audio is not captured while it is off.' : !photoReady ? 'Upload and fit a photo, then anchor R1, select its boundary straps, and confirm the region map to enable measurement.' : `Microphone is off. Use “${anchorName}” to match the photo orientation, then locate R1 between straps 1–3.`}</span></div>

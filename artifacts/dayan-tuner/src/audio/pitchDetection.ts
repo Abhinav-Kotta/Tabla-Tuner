@@ -9,6 +9,7 @@ export interface PitchResult {
   frequency: number | null;
   confidence: number;
   correlation: number;
+  /** Repetition evidence at two and three candidate periods. */
   harmonicAgreement: number;
 }
 
@@ -48,6 +49,21 @@ export function estimatePitch(
   );
   const autocorrelation = normalizedAutocorrelation(samples, minLag, maxLag);
 
+  const repeatedPeriodAgreement = (lag: number): number => {
+    const checks = [
+      { index: lag * 2, weight: 0.16 },
+      { index: lag * 3, weight: 0.09 },
+    ].filter((check) => check.index <= maxLag);
+
+    if (checks.length === 0) return 0;
+
+    const totalWeight = checks.reduce((sum, check) => sum + check.weight, 0);
+    return checks.reduce(
+      (sum, check) => sum + Math.max(0, autocorrelation[check.index] ?? 0) * check.weight,
+      0,
+    ) / totalWeight;
+  };
+
   let bestLag = minLag;
   let bestScore = -1;
   let secondBestScore = -1;
@@ -57,13 +73,10 @@ export function estimatePitch(
       continue;
     }
 
-    // A period that repeats at 2x and 3x is much more likely to be the
-    // fundamental than a short period caused by a dominant overtone.
-    const secondHarmonic = autocorrelation[Math.min(maxLag, lag * 2)] ?? 0;
-    const thirdHarmonic = autocorrelation[Math.min(maxLag, lag * 3)] ?? 0;
-    const harmonicAgreement =
-      Math.max(0, secondHarmonic) * 0.16 + Math.max(0, thirdHarmonic) * 0.09;
-    const score = correlation * 0.75 + harmonicAgreement;
+    // Only use real two-period and three-period samples. An out-of-range
+    // check is omitted instead of being clamped to the final search bin.
+    const harmonicAgreement = repeatedPeriodAgreement(lag);
+    const score = correlation * 0.8 + harmonicAgreement * 0.2;
 
     if (score > bestScore) {
       secondBestScore = bestScore;
@@ -77,9 +90,7 @@ export function estimatePitch(
   const refinedLag = parabolicPeak(autocorrelation, bestLag);
   const frequency = sampleRate / refinedLag;
   const correlation = autocorrelation[bestLag] ?? 0;
-  const harmonicAgreement =
-    Math.max(0, autocorrelation[Math.min(maxLag, bestLag * 2)] ?? 0) * 0.65 +
-    Math.max(0, autocorrelation[Math.min(maxLag, bestLag * 3)] ?? 0) * 0.35;
+  const harmonicAgreement = repeatedPeriodAgreement(bestLag);
   const margin = Math.max(0, bestScore - secondBestScore);
   const confidence = Math.min(
     1,
