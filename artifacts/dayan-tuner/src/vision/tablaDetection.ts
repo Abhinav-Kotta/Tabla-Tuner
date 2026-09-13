@@ -23,7 +23,7 @@ function sampleLuminance(data: Uint8ClampedArray, width: number, x: number, y: n
 
 /**
  * Lightweight local head detection for a top-down photo. Instead of pulling
- * an ML model into the browser, we score a family of ellipse candidates by
+ * an ML model into the browser, we score a family of circular candidates by
  * how many dark-to-light boundaries they encounter around their perimeter.
  * A real dayan head is circular enough for this to be useful while still
  * producing a geometry that the overlay can reuse exactly.
@@ -78,7 +78,7 @@ export function detectTablaHead(
         centerX,
         centerY,
         radiusX: radius,
-        radiusY: radius * (height / width),
+        radiusY: radius,
         rotation: 0,
         confidence,
       };
@@ -89,34 +89,32 @@ export function detectTablaHead(
     return null;
   }
 
-  const normalizedCanvas = document.createElement('canvas');
-  const size = 820;
-  normalizedCanvas.width = size;
-  normalizedCanvas.height = size;
-  const normalizedContext = normalizedCanvas.getContext('2d');
-  if (!normalizedContext) {
-    return null;
-  }
-  normalizedContext.drawImage(
-    canvas,
-    best.centerX - best.radiusX,
-    best.centerY - best.radiusY,
-    best.radiusX * 2,
-    best.radiusY * 2,
-    0,
-    0,
-    size,
-    size,
-  );
-
-  return {
-    geometry: {
-      ...best,
-      centerX: size / 2,
-      centerY: size / 2,
-      radiusX: size / 2,
-      radiusY: size / 2,
-    },
-    normalizedCanvas,
+  const geometry = {
+    ...best,
+    centerX: best.centerX / processScale,
+    centerY: best.centerY / processScale,
+    radiusX: best.radiusX / processScale,
+    radiusY: best.radiusY / processScale,
   };
+  const normalizedCanvas = renderTablaReference(image, geometry);
+  return normalizedCanvas ? { geometry, normalizedCanvas } : null;
+}
+
+/** Square crop with one scale for both axes; never stretch an ellipse into a circle. */
+export function renderTablaReference(
+  image: HTMLImageElement | HTMLCanvasElement,
+  geometry: HeadGeometry,
+  canvas = document.createElement('canvas'),
+): HTMLCanvasElement | null {
+  canvas.width = canvas.height = 820;
+  const context = canvas.getContext('2d');
+  if (!context || geometry.radiusX <= 0) return null;
+  context.fillStyle = '#20242b';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const scale = canvas.width / (geometry.radiusX * 2);
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate(geometry.rotation * Math.PI / 180);
+  context.scale(scale, scale);
+  context.drawImage(image, -geometry.centerX, -geometry.centerY);
+  return canvas;
 }
