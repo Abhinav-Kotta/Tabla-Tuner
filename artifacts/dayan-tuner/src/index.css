@@ -781,3 +781,132 @@ button { cursor: pointer; }
   .guide-hero { flex-direction: column; align-items: flex-start; }
   .guide-hero-mark { margin-top: 20px; }
 }
+
+/* Apple-inspired refinement: generous whitespace, a quiet stage, and one
+   centered visual that remains pinned while the story advances. */
+.guide-stage {
+  width: min(100%, 1440px);
+  max-width: none;
+  padding-inline: clamp(20px, 5vw, 72px);
+  background: radial-gradient(circle at 72% 10%, rgba(214, 163, 84, .1), transparent 24%), radial-gradient(circle at 18% 58%, rgba(93, 133, 156, .08), transparent 28%);
+}
+.guide-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: min(78svh, 760px);
+  padding: clamp(76px, 10vw, 144px) 0 clamp(52px, 8vw, 112px);
+  border-bottom-color: rgba(154, 169, 184, .22);
+}
+.guide-hero-copy h2 {
+  max-width: 900px;
+  font-size: clamp(48px, 8.4vw, 112px);
+  font-weight: 600;
+  letter-spacing: -.075em;
+}
+.guide-hero-copy p {
+  max-width: 500px;
+  margin-top: 28px;
+  color: #c4cdd7;
+  font-size: clamp(16px, 1.7vw, 20px);
+  line-height: 1.5;
+}
+.guide-hero-mark {
+  width: clamp(128px, 15vw, 190px);
+  height: clamp(128px, 15vw, 190px);
+  margin: 0 clamp(8px, 3vw, 44px) 0 32px;
+  opacity: .9;
+}
+.guide-scroll-story {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(42px, 8vw, 132px);
+  max-width: 1240px;
+  padding: clamp(36px, 6vw, 86px) 0 clamp(112px, 14vw, 220px);
+}
+.guide-story-visual-sticky {
+  top: 88px;
+  min-height: calc(100svh - 120px);
+  justify-content: center;
+}
+.guide-story-visual {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: min(68svh, 680px);
+  padding: clamp(30px, 5vw, 72px);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(22px, 3vw, 34px);
+  border-color: rgba(155, 171, 187, .34);
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 42%, #2b3b4b 0, #18232e 48%, #0d141b 100%);
+}
+.guide-visual-art {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+.guide-story-visual .guide-photo-ring,
+.guide-story-visual .guide-region-dial {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-inline: auto;
+}
+.guide-story-visual .guide-photo-ring { width: min(78%, 430px); }
+.guide-story-visual .guide-region-dial { width: min(72%, 390px); }
+.guide-story-visual .guide-gesture,
+.guide-story-visual .guide-strap-line,
+.guide-story-visual .guide-audio-chip {
+  flex: 0 0 auto;
+  align-self: center;
+}
+.guide-story-visual .guide-audio-bars { width: min(86%, 460px); align-self: center; }
+.guide-visual-caption {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  text-align: center;
+  white-space: normal;
+}
+.guide-story-copy { padding-top: 0; }
+.guide-story-step {
+  min-height: calc(100svh - 88px);
+  padding: 44px 0 44px clamp(24px, 5vw, 72px);
+}
+.guide-story-step h3 {
+  max-width: 580px;
+  font-size: clamp(44px, 5.5vw, 78px);
+  line-height: .98;
+}
+.guide-story-step p { max-width: 500px; font-size: clamp(17px, 1.55vw, 20px); }
+.guide-story-nav button { min-height: 44px; }
+.guide-footer-grid { max-width: 1240px; margin-inline: auto; }
+@media (max-width: 960px) {
+  .guide-stage { padding-inline: clamp(16px, 4vw, 32px); }
+  .guide-hero { min-height: 72svh; }
+  .guide-scroll-story { gap: 24px; }
+  .guide-story-visual-sticky { top: 76px; min-height: 0; }
+  .guide-story-visual { min-height: min(62svh, 600px); }
+}
+@media (max-width: 720px) {
+  .guide-hero { display: flex; min-height: 70svh; padding-top: 64px; }
+  .guide-hero-copy h2 { font-size: clamp(48px, 14vw, 72px); }
+  .guide-hero-copy p { margin-top: 22px; font-size: 17px; }
+  .guide-hero-mark { width: 116px; height: 116px; margin: 38px 0 0; align-self: flex-end; }
+  .guide-scroll-story { padding-top: 28px; }
+  .guide-story-visual-sticky { top: 68px; padding-bottom: 24px; background: #121419; }
+  .guide-story-visual { min-height: 450px; padding: 28px 18px; border-radius: 18px; }
+  .guide-story-visual .guide-photo-ring { width: min(78vw, 300px); }
+  .guide-story-visual .guide-region-dial { width: min(72vw, 280px); }
+  .guide-story-visual .guide-audio-bars { width: min(84vw, 330px); height: 170px; }
+  .guide-story-step { min-height: 520px; padding: 42px 0 42px 24px; }
+  .guide-story-step h3 { font-size: clamp(42px, 12vw, 62px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-story-visual, .guide-story-visual .guide-photo-ring, .guide-story-visual .guide-region-dial { animation: none; }
+}

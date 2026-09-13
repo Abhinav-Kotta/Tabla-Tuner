@@ -796,9 +796,12 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
           <div className="guide-story-visual-sticky">
             <div className="guide-story-topline"><span>FIELD NOTES</span><span>{step.number} / 03</span></div>
             <div key={step.number} className={`guide-story-visual guide-visual-${step.visual}`} aria-hidden="true">
-              {step.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div><span className="guide-visual-caption">orientation mark locked</span></>}
-              {step.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div><span className="guide-visual-caption">shared edges / clockwise</span></>}
-              {step.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div><span className="guide-visual-caption">stable clusters reveal the note</span></>}
+              <div className="guide-visual-art">
+                {step.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div></>}
+                {step.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div></>}
+                {step.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div></>}
+              </div>
+              <span className="guide-visual-caption">{step.visual === 'photo' ? 'orientation mark locked' : step.visual === 'regions' ? 'shared edges / clockwise' : 'stable clusters reveal the note'}</span>
             </div>
             <div className="guide-story-progress" aria-hidden="true"><span style={{ transform: `scaleX(${(activeStep + 1) / steps.length})` }} /></div>
             <nav className="guide-story-nav" aria-label="Jump to guide step">{steps.map((item, index) => <button key={item.number} aria-current={activeStep === index ? 'step' : undefined} className={activeStep === index ? 'active' : ''} onClick={() => jumpToStep(index)}><span>{item.number}</span><small>{item.kicker}</small></button>)}</nav>
