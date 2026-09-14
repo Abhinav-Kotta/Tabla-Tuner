@@ -38,6 +38,8 @@ import { PhotoCanvas } from './components/photo-canvas';
 import { PhotoSetupModal } from './components/photo-setup-modal';
 import { PhotoInteraction } from './components/photo-interaction';
 import { StrapBoundaries } from './components/strap-boundaries';
+import { BackgroundPaths } from './components/ui/background-paths';
+import { Waveform } from './components/ui/waveform';
 import { autofillBoundaries, boundaryArc, moveBoundary, strapRange, type PhotoAnchor } from './vision/photoMapping';
 import { detectTablaHead, renderTablaReference, type HeadGeometry } from './vision/tablaDetection';
 
@@ -76,7 +78,7 @@ const REGIONS: Region[] = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 const TARGET_TOLERANCES = [3, 5, 10, 15];
-const MAX_STRIKE_VARIANCE_CENTS = 80;
+const MAX_STRIKE_VARIANCE_CENTS = 140;
 const STRIKE_CAPTURE_WINDOW_MS = 180;
 
 function freshRegions(): Region[] {
@@ -85,6 +87,17 @@ function freshRegions(): Region[] {
 
 function formatHz(value: number | null): string {
   return value == null || !Number.isFinite(value) ? '—' : value.toFixed(2);
+}
+
+function normalizeFrequencyToReference(frequency: number, reference: number): number {
+  if (!Number.isFinite(frequency) || !Number.isFinite(reference) || reference <= 0) return Number.NaN;
+
+  let normalized = frequency;
+  // Autocorrelation can occasionally choose the octave above or below. Fold
+  // that candidate into the reference octave before comparing strike spread.
+  while (normalized / reference > 1.5) normalized /= 2;
+  while (normalized / reference < 0.667) normalized *= 2;
+  return normalized;
 }
 
 function getRegionStatus(region: Region, targetHz: number, tolerance: number): TuningStatus | 'awaiting' {
@@ -218,23 +231,45 @@ function TunerConsole() {
     const current = regionsRef.current.find((region) => region.id === regionId);
     if (!current || current.strikes.length >= 3) return;
 
-    if (confidence < 0.46 || !Number.isFinite(frequency)) {
+    const reference = current.strikes.length > 0 ? median(current.strikes) : target;
+    const normalizedFrequency = normalizeFrequencyToReference(frequency, reference);
+
+    if (confidence < 0.46 || !Number.isFinite(normalizedFrequency)) {
       setRejectedCount((count) => count + 1);
-      setMessage('Pitch unclear. Strike the highlighted area again.');
+      setMessage('No stable pitch registered. Strike once, let it ring, and try again.');
       return;
     }
 
     if (current.strikes.length > 0) {
       const center = median(current.strikes);
-      const spread = Math.abs(centsDifference(frequency, center));
+      const signedDifference = centsDifference(normalizedFrequency, center);
+      const spread = Math.abs(signedDifference);
       if (!Number.isFinite(spread) || spread > MAX_STRIKE_VARIANCE_CENTS) {
+        const candidateTargetDistance = Math.abs(centsDifference(normalizedFrequency, target));
+        const centerTargetDistance = Math.abs(centsDifference(center, target));
+
+        // If the first accepted strike was an octave/error outlier, allow a
+        // clearly better candidate to restart the cluster instead of trapping
+        // every later strike behind the stale reference.
+        if (current.strikes.length === 1 && candidateTargetDistance + 60 < centerTargetDistance) {
+          const nextRegions = regionsRef.current.map((region) =>
+            region.id === regionId
+              ? { ...region, strikes: [normalizedFrequency], averageFrequency: null, confidence: Math.min(1, confidence) }
+              : region,
+          );
+          regionsRef.current = nextRegions;
+          setRegions(nextRegions);
+          setMessage('The first reading was unstable. Re-centered on the clearer strike; repeat it twice.');
+          return;
+        }
+
         setRejectedCount((count) => count + 1);
-        setMessage('That strike was inconsistent. Try again.');
+        setMessage(`Pitch jump ${formatCents(signedDifference)}. Keep the same spot, let it ring, and strike again.`);
         return;
       }
     }
 
-    const strikes = [...current.strikes, frequency];
+    const strikes = [...current.strikes, normalizedFrequency];
     const averageFrequency = strikes.length === 3 ? median(strikes) : null;
     const nextRegions = regionsRef.current.map((region) =>
       region.id === regionId
@@ -267,7 +302,7 @@ function TunerConsole() {
     strikeCaptureRef.current = null;
     if (capture.samples.length === 0) {
       setRejectedCount((count) => count + 1);
-      setMessage('Pitch unclear. Strike the highlighted area again.');
+      setMessage('No stable pitch registered. Strike once, let it ring, and try again.');
       return;
     }
 
@@ -543,106 +578,120 @@ function TunerConsole() {
                 </PhotoAlignment>}</>);
 
   return (
-    <div className="console-noise min-h-[100dvh] bg-[#121419] text-[#d9dde4]">
+    <div className="console-noise min-h-[100dvh] bg-background text-foreground">
       <PhotoSetupModal open={setupOpen} onOpenChange={setSetupOpen} step={photoStep} firstBoundary={firstBoundary} selectedBoundary={selectedBoundary} anchorPlaced={anchor !== null} anchorName={anchorName} preview={photoPreview} controls={photoControls} error={boundaryError} />
       <div className="flex min-h-[100dvh]">
-        <aside className={`${collapsed ? 'w-[68px]' : 'w-[220px]'} hidden shrink-0 border-r border-[#282d36] bg-[#101216] transition-[width] duration-300 md:flex md:flex-col`}>
-          <div className="flex h-[72px] items-center border-b border-[#282d36] px-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-[#d6a354]/40 bg-[#d6a354]/10 text-[#dfa656]"><Gauge size={19} strokeWidth={1.6} /></div>
-            {!collapsed && <div className="ml-3 leading-none"><p className="text-[13px] font-extrabold tracking-[.16em] text-[#ece7de]">DAYAN</p><p className="mt-1 font-mono text-[9px] tracking-[.3em] text-[#7d8592]">TUNER / 01</p></div>}
+        <aside className={`${collapsed ? 'w-[68px]' : 'w-[220px]'} hidden shrink-0 border-r border-border bg-background transition-[width] duration-300 md:flex md:flex-col`}>
+          <div className="flex h-[72px] items-center border-b border-border px-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-primary/40 bg-primary/10 text-primary"><Gauge size={19} strokeWidth={1.6} /></div>
+            {!collapsed && <div className="ml-3 leading-none"><p className="text-[13px] font-extrabold tracking-[.16em] text-primary">DAYAN</p><p className="mt-1 font-mono text-[9px] tracking-[.3em] text-muted-foreground">TUNER / 01</p></div>}
           </div>
           <div className="flex flex-1 flex-col px-3 py-5">
-            {!collapsed && <p className="mb-3 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-[#59616d]">Session</p>}
-            <button data-testid="button-session-active" onClick={() => setActiveView('session')} className={`mb-1 flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] font-semibold transition ${activeView === 'session' ? 'border-[#d6a354]/30 bg-[#d6a354]/10 text-[#ebc17b]' : 'border-transparent text-[#737b88] hover:bg-[#1b1f26] hover:text-[#bdc4ce]'} ${collapsed ? 'justify-center' : ''}`}><Activity size={15} />{!collapsed && 'Tuning session'}</button>
-            <button data-testid="button-session-new" onClick={() => { stopMicrophone(); resetMeasurements(); setActiveView('new'); }} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'new' ? 'border-[#d6a354]/30 bg-[#d6a354]/10 text-[#ebc17b]' : 'border-transparent text-[#737b88] hover:bg-[#1b1f26] hover:text-[#bdc4ce]'} ${collapsed ? 'justify-center' : ''}`}><Crosshair size={15} />{!collapsed && 'New measurement'}</button>
-            <div className="my-6 h-px bg-[#252a32]" />
-            {!collapsed && <p className="mb-3 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-[#59616d]">Reference</p>}
-            <button data-testid="button-guide" onClick={() => setActiveView('guide')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'guide' ? 'border-[#d6a354]/30 bg-[#d6a354]/10 text-[#ebc17b]' : 'border-transparent text-[#737b88] hover:bg-[#1b1f26] hover:text-[#bdc4ce]'} ${collapsed ? 'justify-center' : ''}`}><CircleHelp size={15} />{!collapsed && 'How it works'}</button>
-            <button data-testid="button-settings" onClick={() => setActiveView('settings')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'settings' ? 'border-[#d6a354]/30 bg-[#d6a354]/10 text-[#ebc17b]' : 'border-transparent text-[#737b88] hover:bg-[#1b1f26] hover:text-[#bdc4ce]'} ${collapsed ? 'justify-center' : ''}`}><Settings2 size={15} />{!collapsed && 'Instrument settings'}</button>
+            {!collapsed && <p className="mb-3 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-muted-foreground">Session</p>}
+            <button data-testid="button-session-active" onClick={() => setActiveView('session')} className={`mb-1 flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] font-semibold transition ${activeView === 'session' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><Activity size={15} />{!collapsed && 'Tuning session'}</button>
+            <button data-testid="button-session-new" onClick={() => { stopMicrophone(); resetMeasurements(); setActiveView('new'); }} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'new' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><Crosshair size={15} />{!collapsed && 'New measurement'}</button>
+            <div className="my-6 h-px bg-muted" />
+            {!collapsed && <p className="mb-3 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-muted-foreground">Reference</p>}
+            <button data-testid="button-guide" onClick={() => setActiveView('guide')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'guide' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><CircleHelp size={15} />{!collapsed && 'How it works'}</button>
+            <button data-testid="button-settings" onClick={() => setActiveView('settings')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'settings' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><Settings2 size={15} />{!collapsed && 'Instrument settings'}</button>
           </div>
-          <div className="border-t border-[#282d36] p-3">
-            <button data-testid="button-collapse-sidebar" onClick={() => setCollapsed(!collapsed)} className="flex w-full items-center justify-center gap-2 py-2 text-[#666f7b] transition hover:text-[#c1c7cf]" aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>{collapsed ? <PanelLeftOpen size={16} /> : <><PanelLeftClose size={16} /><span className="font-mono text-[9px] uppercase tracking-[.15em]">Collapse</span></>}</button>
+          <div className="border-t border-border p-3">
+            <button data-testid="button-collapse-sidebar" onClick={() => setCollapsed(!collapsed)} className="flex w-full items-center justify-center gap-2 py-2 text-muted-foreground transition hover:text-foreground" aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>{collapsed ? <PanelLeftOpen size={16} /> : <><PanelLeftClose size={16} /><span className="font-mono text-[9px] uppercase tracking-[.15em]">Collapse</span></>}</button>
           </div>
         </aside>
 
         <main className="console-grid min-w-0 flex-1">
-          <header className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#282d36] bg-[#14161b]/95 px-5 py-3 backdrop-blur-sm md:px-8">
+          <header className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-5 py-3 md:px-8">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center border border-[#d6a354]/40 bg-[#d6a354]/10 text-[#dfa656] md:hidden"><Gauge size={16} /></div>
-              <div><p className="font-mono text-[9px] uppercase tracking-[.26em] text-[#6e7682]">Precision tuning workspace</p><h1 className="mt-1 text-[17px] font-semibold tracking-[-.02em] text-[#e7e9ec]">{activeView === 'session' ? 'Dayan / surface analysis' : activeView === 'new' ? 'New measurement / setup' : activeView === 'guide' ? 'How it works / field guide' : 'Instrument settings / local'}</h1></div>
+              <div className="flex h-8 w-8 items-center justify-center border border-primary/40 bg-primary/10 text-primary md:hidden"><Gauge size={16} /></div>
+              <div><p className="font-mono text-[9px] uppercase tracking-[.26em] text-muted-foreground">Precision tuning workspace</p><h1 className="mt-1 text-[17px] font-semibold tracking-[-.02em] text-foreground">{activeView === 'session' ? 'Dayan / surface analysis' : activeView === 'new' ? 'New measurement / setup' : activeView === 'guide' ? 'How it works / field guide' : 'Instrument settings / local'}</h1></div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden items-center gap-2 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${micState === 'ready' ? 'bg-[#82c8a0]' : 'bg-[#646b76]'}`} /><span className="font-mono text-[10px] uppercase tracking-[.12em] text-[#777f8b]">{micState === 'ready' ? 'Input ready' : 'Input idle'}</span></div>
-              <div className="h-5 w-px bg-[#2b3038]" />
-              <span data-testid="status-session" className="font-mono text-[10px] uppercase tracking-[.14em] text-[#929aa5]">Local session</span>
+              <div className="hidden items-center gap-2 sm:flex"><span className={`h-1.5 w-1.5 rounded-full ${micState === 'ready' ? 'bg-emerald-600' : 'bg-muted'}`} /><span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">{micState === 'ready' ? 'Input ready' : 'Input idle'}</span></div>
+              <div className="h-5 w-px bg-muted" />
+              <span data-testid="status-session" className="font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">Local session</span>
             </div>
           </header>
 
+          <nav aria-label="Mobile workspace navigation" className="border-b border-border bg-background px-4 py-3 md:hidden">
+            <label htmlFor="workspace-view" className="mb-2 block text-xs text-muted-foreground">Workspace</label>
+            <select id="workspace-view" value={activeView} onChange={(event) => {
+              const view = event.target.value as WorkspaceView;
+              if (view === 'new') { stopMicrophone(); resetMeasurements(); }
+              setActiveView(view);
+            }} className="w-full border border-input bg-card px-3 py-3 text-sm text-foreground">
+              <option value="session">Tuning session</option>
+              <option value="new">New measurement</option>
+              <option value="guide">How it works</option>
+              <option value="settings">Instrument settings</option>
+            </select>
+          </nav>
+
           {activeView === 'session' ? (
           <div className="mx-auto max-w-[1500px] p-4 md:p-7">
-            <section className="mb-5 flex flex-col justify-between gap-4 border-b border-[#282d36] pb-5 lg:flex-row lg:items-end">
-              <div><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[#d6a354]"><span className="h-px w-5 bg-[#d6a354]" />01 / calibrate</div><h2 className="text-2xl font-semibold tracking-[-.04em] text-[#eef0f2] md:text-[29px]">Find the center before you chase the note.</h2><p className="mt-2 max-w-[610px] text-[12px] leading-5 text-[#818995]">A clean top-down reference and three consistent strikes per region reveal how evenly the dayan is carrying pitch.</p></div>
-              <div className="flex shrink-0 items-center gap-3"><div className="text-right"><p className="font-mono text-[9px] uppercase tracking-[.17em] text-[#626a76]">Session progress</p><p data-testid="text-progress" className="mt-1 font-mono text-[15px] text-[#d8dde3]">{completedCount}<span className="text-[#646c77]"> / 8 regions</span></p></div><div className="h-10 w-px bg-[#303640]" /><button data-testid="button-reset-measurements" onClick={resetMeasurements} className="flex items-center gap-2 border border-[#343a44] bg-[#1a1e24] px-3 py-2 font-mono text-[10px] uppercase tracking-[.1em] text-[#99a2ad] transition hover:border-[#d6a354]/50 hover:text-[#e2b56b]"><RotateCcw size={13} />Reset</button></div>
+            <section className="mb-5 flex flex-col justify-between gap-4 border-b border-border pb-5 lg:flex-row lg:items-end">
+              <div><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-primary"><span className="h-px w-5 bg-primary" />01 / calibrate</div><h2 className="text-2xl font-semibold tracking-[-.04em] text-foreground md:text-[29px]">Find the center before you chase the note.</h2><p className="mt-2 max-w-[610px] text-[12px] leading-5 text-muted-foreground">A clean top-down reference and three consistent strikes per region reveal how evenly the dayan is carrying pitch.</p></div>
+              <div className="flex shrink-0 items-center gap-3"><div className="text-right"><p className="font-mono text-[9px] uppercase tracking-[.17em] text-muted-foreground">Session progress</p><p data-testid="text-progress" className="mt-1 font-mono text-[15px] text-foreground">{completedCount}<span className="text-muted-foreground"> / 8 regions</span></p></div><div className="h-10 w-px bg-muted" /><button data-testid="button-reset-measurements" onClick={resetMeasurements} className="flex items-center gap-2 border border-border bg-muted px-3 py-2 font-mono text-[10px] uppercase tracking-[.1em] text-muted-foreground transition hover:border-primary/50 hover:text-primary"><RotateCcw size={13} />Reset</button></div>
             </section>
 
-            {isTuned && <div data-testid="status-dayan-tuned" className="mb-5 flex items-center gap-3 border border-[#82c8a0]/30 bg-[#193026] px-4 py-3 text-[#a9dfbd] shadow-[0_0_28px_rgba(130,200,160,.08)]"><Check size={16} /><div><p className="text-[12px] font-semibold">Dayan Tuned</p><p className="mt-0.5 text-[10px] text-[#86ba9b]">All 8 regions are within ±{tolerance} cents of {targetNote}.</p></div></div>}
+            {isTuned && <div data-testid="status-dayan-tuned" className="mb-5 flex items-center gap-3 border border-emerald-600/30 bg-emerald-950/50 px-4 py-3 text-emerald-200 shadow-[0_0_28px_rgba(130,200,160,.08)]"><Check size={16} /><div><p className="text-[12px] font-semibold">Dayan Tuned</p><p className="mt-0.5 text-[10px] text-emerald-200">All 8 regions are within ±{tolerance} cents of {targetNote}.</p></div></div>}
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.22fr)_minmax(340px,.78fr)]">
-              <section className="panel-inset border border-[#2d333d] bg-[#171a20] reveal">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#292f38] px-4 py-3">
-                  <div className="flex items-center gap-2"><Crosshair size={15} className="text-[#d6a354]" /><h3 className="text-[12px] font-semibold text-[#dfe3e8]">Visual reference</h3><span className="font-mono text-[9px] uppercase tracking-[.13em] text-[#646d78]">top view / guide</span></div>
+              <section className="panel-inset border border-border bg-card reveal">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <div className="flex items-center gap-2"><Crosshair size={15} className="text-primary" /><h3 className="text-[12px] font-semibold text-foreground">Visual reference</h3><span className="font-mono text-[9px] uppercase tracking-[.13em] text-muted-foreground">top view / guide</span></div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex border border-[#343a44] bg-[#1a1e24] p-0.5"><button data-testid="button-view-heatmap" onClick={() => setViewMode('heatmap')} disabled={Boolean(normalizedImageUrl) && photoStep !== 'ready'} className={`px-2 py-1 font-mono text-[9px] uppercase tracking-[.08em] disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'heatmap' ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691]'}`}>Heat map</button><button data-testid="button-view-overlay" onClick={() => setViewMode('overlay')} disabled={!normalizedImageUrl} className={`px-2 py-1 font-mono text-[9px] uppercase tracking-[.08em] disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'overlay' ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691]'}`}>Tabla overlay</button></div>
-                    <label data-testid="button-upload-image" className="has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40 flex cursor-pointer items-center gap-2 border border-[#39414c] bg-[#1e232a] px-3 py-2 font-mono text-[10px] uppercase tracking-[.1em] text-[#c3c9d0] transition hover:border-[#d6a354]/60 hover:text-[#edc17b]"><Upload size={13} />{fileName ? 'Replace image' : 'Upload image'}<input data-testid="input-upload-image" className="sr-only" type="file" accept="image/*" onChange={handleImage} disabled={alignmentLocked} /></label>
-                    <label className="flex cursor-pointer items-center gap-2 border border-[#39414c] bg-[#1e232a] px-3 py-2 font-mono text-[10px] uppercase text-[#c3c9d0] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40"><Camera size={13} />Take photo<input data-testid="input-camera-photo" className="sr-only" type="file" accept="image/*" capture="environment" onChange={handleImage} disabled={alignmentLocked} /></label>
+                    <div className="flex border border-border bg-muted p-0.5"><button data-testid="button-view-heatmap" onClick={() => setViewMode('heatmap')} disabled={Boolean(normalizedImageUrl) && photoStep !== 'ready'} className={`px-2 py-1 font-mono text-[9px] uppercase tracking-[.08em] disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'heatmap' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>Heat map</button><button data-testid="button-view-overlay" onClick={() => setViewMode('overlay')} disabled={!normalizedImageUrl} className={`px-2 py-1 font-mono text-[9px] uppercase tracking-[.08em] disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'overlay' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>Tabla overlay</button></div>
+                    <label data-testid="button-upload-image" className="has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40 flex cursor-pointer items-center gap-2 border border-border bg-muted px-3 py-2 font-mono text-[10px] uppercase tracking-[.1em] text-foreground transition hover:border-primary/60 hover:text-primary"><Upload size={13} />{fileName ? 'Replace image' : 'Upload image'}<input data-testid="input-upload-image" className="sr-only" type="file" accept="image/*" onChange={handleImage} disabled={alignmentLocked} /></label>
+                    <label className="flex cursor-pointer items-center gap-2 border border-border bg-muted px-3 py-2 font-mono text-[10px] uppercase text-foreground has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40"><Camera size={13} />Take photo<input data-testid="input-camera-photo" className="sr-only" type="file" accept="image/*" capture="environment" onChange={handleImage} disabled={alignmentLocked} /></label>
                   </div>
                 </div>
-                {normalizedImageUrl && <div className="border-b border-[#303742] bg-[#202832] px-4 py-3 break-words text-[12px] text-[#e2e8ed]" role="status">
+                {normalizedImageUrl && <div className="border-b border-border bg-muted px-4 py-3 break-words text-[12px] text-foreground" role="status">
                   {photoReady ? `◆ ${anchorName} · R1: straps 1–3 · count clockwise` : 'Setup paused — choose Continue photo setup to resume.'}
                 </div>}
                 <div className="relative flex min-h-[425px] items-center justify-center overflow-hidden p-5 md:min-h-[520px]">
-                  <div className="absolute left-5 top-5 font-mono text-[9px] uppercase tracking-[.16em] text-[#59616c]">{photoReady ? 'Physical anchor / R1' : 'Photo setup / preview'}</div><div className="absolute right-5 top-5 font-mono text-[9px] text-[#59616c]">Clockwise →</div>
+                  <div className="absolute left-5 top-5 font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground">{photoReady ? 'Physical anchor / R1' : 'Photo setup / preview'}</div><div className="absolute right-5 top-5 font-mono text-[9px] text-muted-foreground">Clockwise →</div>
                   {!setupOpen && photoPreview}
-                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-[90%] text-center font-mono text-[10px] text-[#8ddbd5]">{photoReady ? '◆ A = orientation · numbered straps = region edges' : 'Anchor R1, then select its two boundary straps'}</div>
-                  <div className="sr-only"><span className="h-2 w-2 rounded-full border border-[#d6a354] bg-[#d6a354]" />Selected region <span className="ml-2 h-2 w-2 rounded-full border border-[#4f8e78] bg-[#4f8e78]" />In tune</div>
-                  {fileName && <div className="absolute bottom-0 right-5 flex max-w-[46%] items-center gap-2 truncate font-mono text-[9px] text-[#6f7884]"><span className={`h-1.5 w-1.5 rounded-full ${geometry ? 'bg-[#82c8a0]' : 'bg-[#c68149]'}`} />{fileName}</div>}
+                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-[90%] text-center font-mono text-[10px] text-muted-foreground">{photoReady ? '◆ A = orientation · numbered straps = region edges' : 'Anchor R1, then select its two boundary straps'}</div>
+                  <div className="sr-only"><span className="h-2 w-2 rounded-full border border-primary bg-primary" />Selected region <span className="ml-2 h-2 w-2 rounded-full border border-emerald-600 bg-emerald-600" />In tune</div>
+                  {fileName && <div className="absolute bottom-0 right-5 flex max-w-[46%] items-center gap-2 truncate font-mono text-[9px] text-muted-foreground"><span className={`h-1.5 w-1.5 rounded-full ${geometry ? 'bg-emerald-600' : 'bg-primary'}`} />{fileName}</div>}
                 </div>
-                <div className="border-t border-[#292f38] px-4 py-3 text-[11px] leading-5 text-[#aeb6c0]">
-                  <strong className="text-[#e4b86b]">{photoReady ? `R${selectedRegion.id} — ${selectedRegion.label}` : 'Choose a physical reference before measuring'}</strong>
+                <div className="border-t border-border px-4 py-3 text-[11px] leading-5 text-muted-foreground">
+                  <strong className="text-primary">{photoReady ? `R${selectedRegion.id} — ${selectedRegion.label}` : 'Choose a physical reference before measuring'}</strong>
                   <p>{photoReady ? `Match the photo orientation using “${anchorName}” on the actual tabla. R1 is between the separately selected straps 1 and 3; the other regions follow clockwise.` : 'Screen position does not identify a spot on the tabla. Fit your photo, then anchor R1 and select its boundary straps.'}</p>
-                  {!normalizedImageUrl && <p className="mt-1 text-[#929ba7]">Upload a photo or use Take photo on your phone. Include the whole head, directly from above. On desktop, Take photo may open the file picker.</p>}
+                  {!normalizedImageUrl && <p className="mt-1 text-muted-foreground">Upload a photo or use Take photo on your phone. Include the whole head, directly from above. On desktop, Take photo may open the file picker.</p>}
                 </div>
-                {normalizedImageUrl && <div className="border-t border-[#394451] p-4">
-                  <button data-testid="button-open-photo-setup" disabled={alignmentLocked} className="min-h-11 w-full rounded border border-[#d6a354] bg-[#302819] px-4 py-3 text-sm font-semibold text-[#f4cf91] disabled:cursor-not-allowed disabled:opacity-40" onClick={() => { if (photoReady) changePhotoStep('fit'); else { setSetupOpen(true); setViewMode('overlay'); } }}>{photoReady ? 'Edit photo, anchor & straps' : 'Continue photo setup'}</button>
-                  {alignmentLocked && <p className="mt-2 text-sm text-[#c0cad7]">Stop the microphone and reset measurements to edit this map.</p>}
+                {normalizedImageUrl && <div className="border-t border-border p-4">
+                  <button data-testid="button-open-photo-setup" disabled={alignmentLocked} className="min-h-11 w-full rounded border border-primary bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40" onClick={() => { if (photoReady) changePhotoStep('fit'); else { setSetupOpen(true); setViewMode('overlay'); } }}>{photoReady ? 'Edit photo, anchor & straps' : 'Continue photo setup'}</button>
+                  {alignmentLocked && <p className="mt-2 text-sm text-foreground">Stop the microphone and reset measurements to edit this map.</p>}
                 </div>}
               </section>
 
-              <section className="panel-inset border border-[#2d333d] bg-[#171a20] reveal" style={{ animationDelay: '80ms' }}>
-                <div className="border-b border-[#292f38] px-5 py-4"><div className="flex items-center gap-2"><SlidersHorizontal size={15} className="text-[#d6a354]" /><h3 className="text-[12px] font-semibold text-[#dfe3e8]">Measurement control</h3></div><p data-testid="status-instruction" role="status" aria-live="polite" className="mt-3 rounded border border-[#7d6948] bg-[#352d20] p-3 text-[15px] font-medium leading-6 text-[#ffe0a8]">{message}</p></div>
+              <section className="panel-inset border border-border bg-card reveal" style={{ animationDelay: '80ms' }}>
+                <div className="border-b border-border px-5 py-4"><div className="flex items-center gap-2"><SlidersHorizontal size={15} className="text-primary" /><h3 className="text-[12px] font-semibold text-foreground">Measurement control</h3></div><p data-testid="status-instruction" role="status" aria-live="polite" className="mt-3 rounded border border-primary bg-muted p-3 text-[15px] font-medium leading-6 text-primary">{message}</p></div>
                 <div className="space-y-5 p-5">
-                  <div><label htmlFor="target-note" className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]"><span>Target note</span><span className="text-[#d6a354]">A4 = 440 Hz</span></label><div className="relative"><select id="target-note" data-testid="select-target-note" value={targetNote} onChange={(event) => { setTargetNote(event.target.value); setMessage('Target updated. Existing region measurements remain available for comparison.'); }} className="w-full appearance-none border border-[#39414b] bg-[#1c2026] px-3 py-3 text-[13px] font-semibold text-[#e4e7ea] outline-none transition focus:border-[#d6a354]">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 text-[#8b94a0]" size={15} /></div></div>
-                  <div><label className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]"><span>In tune tolerance</span><span className="text-[#d6a354]">cents</span></label><div className="grid grid-cols-4 border border-[#39414b] bg-[#1c2026] p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} data-testid={`button-tolerance-${value}`} onClick={() => setTolerance(value)} className={`py-2 font-mono text-[10px] ${tolerance === value ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691] hover:text-[#d9dde4]'}`}>±{value}¢</button>)}</div></div>
-                  <div className="border border-[#303742] bg-[#1b1f25] p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-[#6f7884]">Selected region</span><span data-testid="text-selected-region" className="font-mono text-[10px] uppercase tracking-[.12em] text-[#d6a354]">Region {selectedRegion.id} / {selectedRegion.label}</span></div><div className="flex items-end justify-between gap-4"><div><span className="block font-mono text-[9px] uppercase tracking-[.14em] text-[#6e7783]">Detected note</span><span data-testid="text-measured-note" className="font-mono text-[33px] leading-none text-[#e8ebed]">{measuredNote}</span><span data-testid="text-measured-frequency" className="ml-2 font-mono text-[11px] text-[#717a86]">{formatHz(measuredFrequency)} Hz</span></div><div className="text-right"><span className="block font-mono text-[10px] uppercase tracking-[.12em] text-[#6e7783]">target {targetNote}</span><span data-testid="text-target-frequency" className="block font-mono text-[12px] text-[#c6cdd5]">{formatHz(targetHz)} Hz</span><span data-testid="text-measured-cents" className="mt-1 block font-mono text-[12px] text-[#edc17b]">{formatCents(measuredCents)}</span></div></div><div className="mt-4 h-1 bg-[#2d333b]"><div className="h-full bg-[#d6a354] transition-[width]" style={{ width: `${measuredFrequency == null ? 4 : Math.min(100, Math.max(4, 100 - Math.abs(measuredCents) * 1.4))}%` }} /></div></div>
-                  <div><div className="mb-2 flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]">Input monitor</span><span className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-[.12em] ${micState === 'ready' ? 'text-[#82c8a0]' : 'text-[#737c88]'}`}><span className={`h-1.5 w-1.5 rounded-full ${micState === 'ready' ? 'meter-pulse bg-[#82c8a0]' : 'bg-[#555d68]'}`} />{micState === 'ready' ? 'listening' : 'offline'}</span></div><div className="flex h-12 items-center gap-[3px] border border-[#303640] bg-[#12151a] px-3">{Array.from({ length: 42 }).map((_, index) => <span key={index} className={`w-[2px] ${micState === 'ready' ? 'bg-[#4f8e78]' : 'bg-[#343b45]'}`} style={{ height: `${micState === 'ready' ? `${Math.max(4, Math.min(39, inputLevel * 340 + ((index * 5) % 8)))}px` : `${6 + ((index * 7) % 8)}px`}`, opacity: micState === 'ready' ? .55 + ((index % 4) * .1) : .7 }} />)}</div><p className="mt-1 font-mono text-[9px] text-[#626b76]">Noise floor {noiseFloor.toFixed(3)}</p></div>
-                  <button data-testid="button-microphone-access" onClick={() => micState === 'ready' ? stopMicrophone(true) : void requestMicrophone()} disabled={micState === 'requesting' || (!photoReady && micState !== 'ready')} className={`flex w-full items-center justify-center gap-2 border px-3 py-3 font-mono text-[10px] uppercase tracking-[.13em] transition ${micState === 'ready' ? 'border-[#b75a4b]/50 bg-[#321f20] text-[#e6aaa2] hover:border-[#d57b70]' : 'border-[#39414a] bg-[#22272f] text-[#d6dce3] hover:border-[#d6a354]/60 hover:text-[#e6b970]'} disabled:cursor-not-allowed disabled:opacity-60`}>{micState === 'ready' ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}{micState === 'requesting' ? 'Requesting access…' : micState === 'ready' ? 'Stop microphone' : micState === 'denied' ? 'Retry microphone access' : !photoReady ? 'Confirm the region map to start' : 'Start microphone'}</button>
-                  <div className="flex items-start gap-2 border-t border-[#292f38] pt-4 text-[10px] leading-4 text-[#69727e]"><Info size={13} className="mt-0.5 shrink-0 text-[#8d7551]" /><span>{micState === 'ready' ? 'Microphone is active. Stop it when you are done; audio is not captured while it is off.' : !photoReady ? 'Upload and fit a photo, then anchor R1, select its boundary straps, and confirm the region map to enable measurement.' : `Microphone is off. Use “${anchorName}” to match the photo orientation, then locate R1 between straps 1–3.`}</span></div>
+                  <div><label htmlFor="target-note" className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground"><span>Target note</span><span className="text-primary">A4 = 440 Hz</span></label><div className="relative"><select id="target-note" data-testid="select-target-note" value={targetNote} onChange={(event) => { setTargetNote(event.target.value); setMessage('Target updated. Existing region measurements remain available for comparison.'); }} className="w-full appearance-none border border-border bg-muted px-3 py-3 text-[13px] font-semibold text-foreground outline-none transition focus:border-primary">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-3.5 text-muted-foreground" size={15} /></div></div>
+                  <div><label className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground"><span>In tune tolerance</span><span className="text-primary">cents</span></label><div className="grid grid-cols-4 border border-border bg-muted p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} data-testid={`button-tolerance-${value}`} onClick={() => setTolerance(value)} className={`py-2 font-mono text-[10px] ${tolerance === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>±{value}¢</button>)}</div></div>
+                  <div className="border border-border bg-muted p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground">Selected region</span><span data-testid="text-selected-region" className="font-mono text-[10px] uppercase tracking-[.12em] text-primary">Region {selectedRegion.id} / {selectedRegion.label}</span></div><div className="flex items-end justify-between gap-4"><div><span className="block font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">Detected note</span><span data-testid="text-measured-note" className="font-mono text-[33px] leading-none text-foreground">{measuredNote}</span><span data-testid="text-measured-frequency" className="ml-2 font-mono text-[11px] text-muted-foreground">{formatHz(measuredFrequency)} Hz</span></div><div className="text-right"><span className="block font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">target {targetNote}</span><span data-testid="text-target-frequency" className="block font-mono text-[12px] text-foreground">{formatHz(targetHz)} Hz</span><span data-testid="text-measured-cents" className="mt-1 block font-mono text-[12px] text-primary">{formatCents(measuredCents)}</span></div></div><div className="mt-4 h-1 bg-muted"><div className="h-full bg-primary transition-[width]" style={{ width: `${measuredFrequency == null ? 4 : Math.min(100, Math.max(4, 100 - Math.abs(measuredCents) * 1.4))}%` }} /></div></div>
+                  <div><div className="mb-2 flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground">Input monitor</span><span className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-[.12em] ${micState === 'ready' ? 'text-emerald-200' : 'text-muted-foreground'}`}><span className={`h-1.5 w-1.5 rounded-full ${micState === 'ready' ? 'meter-pulse bg-emerald-600' : 'bg-muted'}`} />{micState === 'ready' ? 'listening' : 'offline'}</span></div><div className="flex h-12 items-center gap-[3px] border border-border bg-background px-3">{Array.from({ length: 42 }).map((_, index) => <span key={index} className={`w-[2px] ${micState === 'ready' ? 'bg-emerald-600' : 'bg-muted'}`} style={{ height: `${micState === 'ready' ? `${Math.max(4, Math.min(39, inputLevel * 340 + ((index * 5) % 8)))}px` : `${6 + ((index * 7) % 8)}px`}`, opacity: micState === 'ready' ? .55 + ((index % 4) * .1) : .7 }} />)}</div><p className="mt-1 font-mono text-[9px] text-muted-foreground">Noise floor {noiseFloor.toFixed(3)}</p></div>
+                  <button data-testid="button-microphone-access" onClick={() => micState === 'ready' ? stopMicrophone(true) : void requestMicrophone()} disabled={micState === 'requesting' || (!photoReady && micState !== 'ready')} className={`flex w-full items-center justify-center gap-2 border px-3 py-3 font-mono text-[10px] uppercase tracking-[.13em] transition ${micState === 'ready' ? 'border-red-600/50 bg-red-950/50 text-red-200 hover:border-red-600' : 'border-border bg-muted text-foreground hover:border-primary/60 hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-60`}>{micState === 'ready' ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}{micState === 'requesting' ? 'Requesting access…' : micState === 'ready' ? 'Stop microphone' : micState === 'denied' ? 'Retry microphone access' : !photoReady ? 'Confirm the region map to start' : 'Start microphone'}</button>
+                  <div className="flex items-start gap-2 border-t border-border pt-4 text-[10px] leading-4 text-muted-foreground"><Info size={13} className="mt-0.5 shrink-0 text-primary" /><span>{micState === 'ready' ? 'Microphone is active. Stop it when you are done; audio is not captured while it is off.' : !photoReady ? 'Upload and fit a photo, then anchor R1, select its boundary straps, and confirm the region map to enable measurement.' : `Microphone is off. Use “${anchorName}” to match the photo orientation, then locate R1 between straps 1–3.`}</span></div>
                 </div>
               </section>
             </div>
 
             <section ref={resultsRef} data-testid="tuning-results" tabIndex={-1} aria-labelledby="results-heading" className="mt-5 grid scroll-mt-5 gap-5 outline-none xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,.6fr)]">
-              <div className="panel-inset border border-[#2d333d] bg-[#171a20] reveal" style={{ animationDelay: '140ms' }}>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#292f38] px-5 py-4"><div><div className="flex items-center gap-2"><Waves size={15} className="text-[#d6a354]" /><h3 id="results-heading" className="text-[16px] font-semibold text-[#dfe3e8]">Results / regional heat map</h3></div><p className="mt-1 text-[10px] text-[#69727e]">Distance from target, averaged across valid strikes</p></div><div className="flex items-center gap-4 font-mono text-[9px] uppercase tracking-[.12em] text-[#737c88]"><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#4f8e78]" />within tolerance</span><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#c7a44f]" />near</span><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#b75a4b]" />far</span></div></div>
-                <div className="divide-y divide-[#272d35] px-5">{regions.map((region) => <HeatRow key={region.id} region={region} targetHz={targetHz} tolerance={tolerance} active={hoveredOrSelected === region.id} disabled={!photoReady} onHover={setHoveredRegion} onClick={() => { setCurrentRegion(region.id); currentRegionRef.current = region.id; }} />)}</div>
-                <div className="flex items-center justify-between border-t border-[#292f38] px-5 py-3"><span data-testid="text-measurement-count" className="font-mono text-[10px] uppercase tracking-[.14em] text-[#68717c]">{totalStrikes} / 24 strikes captured <span className="ml-2 text-[#525c67]">({rejectedCount} rejected)</span></span><div className="h-1 w-28 bg-[#2e343d]"><div className="h-full bg-[#d6a354] transition-[width]" style={{ width: `${progress}%` }} /></div></div>
+              <div className="panel-inset border border-border bg-card reveal" style={{ animationDelay: '140ms' }}>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4"><div><div className="flex items-center gap-2"><Waves size={15} className="text-primary" /><h3 id="results-heading" className="text-[16px] font-semibold text-foreground">Results / regional heat map</h3></div><p className="mt-1 text-[10px] text-muted-foreground">Distance from target, averaged across valid strikes</p></div><div className="flex items-center gap-4 font-mono text-[9px] uppercase tracking-[.12em] text-muted-foreground"><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#4f8e78]" />within tolerance</span><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#c7a44f]" />near</span><span className="flex items-center gap-1.5"><i className="h-2 w-5 bg-[#b75a4b]" />far</span></div></div>
+                <div className="divide-y divide-border px-5">{regions.map((region) => <HeatRow key={region.id} region={region} targetHz={targetHz} tolerance={tolerance} active={hoveredOrSelected === region.id} disabled={!photoReady} onHover={setHoveredRegion} onClick={() => { setCurrentRegion(region.id); currentRegionRef.current = region.id; }} />)}</div>
+                <div className="flex items-center justify-between border-t border-border px-5 py-3"><span data-testid="text-measurement-count" className="font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">{totalStrikes} / 24 strikes captured <span className="ml-2 text-muted-foreground">({rejectedCount} rejected)</span></span><div className="h-1 w-28 bg-muted"><div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} /></div></div>
               </div>
-              <div className="panel-inset border border-[#2d333d] bg-[#171a20] reveal" style={{ animationDelay: '180ms' }}>
-                <div className="border-b border-[#292f38] px-5 py-4"><div className="flex items-center gap-2"><Radio size={15} className="text-[#d6a354]" /><h3 className="text-[12px] font-semibold text-[#dfe3e8]">Readout guidance</h3></div><p className="mt-1 text-[10px] text-[#69727e]">What the pattern is telling you</p></div>
-                <div className="p-5"><div className="mb-5 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d6a354]/40 bg-[#d6a354]/10"><Waves size={17} className="text-[#d6a354]" /></div><div><p className="text-[12px] font-semibold text-[#d8dde2]">{isTuned ? 'Surface is in tune' : !photoReady ? 'Set up your physical reference' : completedCount === 8 ? 'Review the warm regions' : 'Build the surface map'}</p><p className="mt-1 text-[10px] leading-4 text-[#717a85]">{!photoReady ? 'Fit the photo, anchor R1, and confirm the boundary straps before measuring.' : selectedRegion.averageFrequency == null ? `Strike Region ${selectedRegion.id} three times to continue.` : guidance(selectedRegion, targetHz, tolerance)}</p></div></div><div className="space-y-3 border-l border-[#3b4149] pl-4"><GuidanceLine number="01" title="Strike the highlighted marker" body="Match the photo using your orientation mark, then strike R1 between straps 1–3. Continue clockwise to R2 (3–5)." /><GuidanceLine number="02" title="Three clean strikes per region" body="A stable cluster matters more than a single perfect number." /><GuidanceLine number="03" title="Adjust the warm bands" body="Sharp means lower tension; flat means increase tension in that region." /></div><button data-testid="button-remeasure-selected" onClick={clearSelectedRegion} disabled={selectedRegion.strikes.length === 0} className="mt-6 flex w-full items-center justify-center gap-2 border border-[#39414a] bg-[#20252c] px-3 py-2.5 font-mono text-[10px] uppercase tracking-[.11em] text-[#b5bdc7] transition hover:border-[#d6a354]/60 hover:text-[#e2b56b] disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={13} />Re-measure Region {selectedRegion.id}</button></div>
+              <div className="panel-inset border border-border bg-card reveal" style={{ animationDelay: '180ms' }}>
+                <div className="border-b border-border px-5 py-4"><div className="flex items-center gap-2"><Radio size={15} className="text-primary" /><h3 className="text-[12px] font-semibold text-foreground">Readout guidance</h3></div><p className="mt-1 text-[10px] text-muted-foreground">What the pattern is telling you</p></div>
+                <div className="p-5"><div className="mb-5 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/40 bg-primary/10"><Waves size={17} className="text-primary" /></div><div><p className="text-[12px] font-semibold text-foreground">{isTuned ? 'Surface is in tune' : !photoReady ? 'Set up your physical reference' : completedCount === 8 ? 'Review the warm regions' : 'Build the surface map'}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{!photoReady ? 'Fit the photo, anchor R1, and confirm the boundary straps before measuring.' : selectedRegion.averageFrequency == null ? `Strike Region ${selectedRegion.id} three times to continue.` : guidance(selectedRegion, targetHz, tolerance)}</p></div></div><div className="space-y-3 border-l border-border pl-4"><GuidanceLine number="01" title="Strike the highlighted marker" body="Match the photo using your orientation mark, then strike R1 between straps 1–3. Continue clockwise to R2 (3–5)." /><GuidanceLine number="02" title="Three clean strikes per region" body="A stable cluster matters more than a single perfect number." /><GuidanceLine number="03" title="Adjust the warm bands" body="Sharp means lower tension; flat means increase tension in that region." /></div><button data-testid="button-remeasure-selected" onClick={clearSelectedRegion} disabled={selectedRegion.strikes.length === 0} className="mt-6 flex w-full items-center justify-center gap-2 border border-border bg-muted px-3 py-2.5 font-mono text-[10px] uppercase tracking-[.11em] text-foreground transition hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={13} />Re-measure Region {selectedRegion.id}</button></div>
               </div>
             </section>
-            <footer className="flex flex-col justify-between gap-2 py-6 font-mono text-[9px] uppercase tracking-[.14em] text-[#555e69] sm:flex-row"><span>Dayan Tuner / local analysis console</span><span className="flex items-center gap-2"><ShieldCheck size={11} /> microphone data stays in this browser</span></footer>
+            <footer className="flex flex-col justify-between gap-2 py-6 font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground sm:flex-row"><span>Dayan Tuner / local analysis console</span><span className="flex items-center gap-2"><ShieldCheck size={11} /> microphone data stays in this browser</span></footer>
           </div>
           ) : activeView === 'new' ? (
             <NewMeasurementView
@@ -702,46 +751,46 @@ function NewMeasurementView({
 }: MeasurementViewProps) {
   return (
     <div className="mx-auto max-w-[1180px] p-4 md:p-7">
-      <section className="mb-6 border-b border-[#282d36] pb-6">
-        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[#d6a354]"><span className="h-px w-5 bg-[#d6a354]" />02 / prepare</div>
-        <h2 className="max-w-[760px] text-3xl font-semibold tracking-[-.05em] text-[#eef0f2]">Set up one clean measurement pass.</h2>
-        <p className="mt-3 max-w-[650px] text-[12px] leading-5 text-[#818995]">Align the head, choose the note, then enter the tuning session when the room and the microphone are ready. Nothing listens until you start it.</p>
+      <section className="mb-6 border-b border-border pb-6">
+        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-primary"><span className="h-px w-5 bg-primary" />02 / prepare</div>
+        <h2 className="max-w-[760px] text-3xl font-semibold tracking-[-.05em] text-foreground">Set up one clean measurement pass.</h2>
+        <p className="mt-3 max-w-[650px] text-[12px] leading-5 text-muted-foreground">Align the head, choose the note, then enter the tuning session when the room and the microphone are ready. Nothing listens until you start it.</p>
       </section>
       <div className="grid gap-5 lg:grid-cols-[1.12fr_.88fr]">
-        <section className="panel-inset border border-[#2d333d] bg-[#171a20]">
-          <div className="border-b border-[#292f38] px-5 py-4">
-            <div className="flex items-center gap-2"><Crosshair size={15} className="text-[#d6a354]" /><h3 className="text-[12px] font-semibold text-[#dfe3e8]">Reference image</h3></div>
-            <p className="mt-2 text-[11px] leading-5 text-[#7d8692]">Use a complete top-down image with the full dayan head visible. The image stays local to this browser.</p>
+        <section className="panel-inset border border-border bg-card">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex items-center gap-2"><Crosshair size={15} className="text-primary" /><h3 className="text-[12px] font-semibold text-foreground">Reference image</h3></div>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">Use a complete top-down image with the full dayan head visible. The image stays local to this browser.</p>
           </div>
           <div className="space-y-4 p-5">
-            <label className="flex min-h-[190px] cursor-pointer flex-col items-center justify-center border border-dashed border-[#4a5059] bg-[#1a1e24] px-6 text-center transition hover:border-[#d6a354]/70 hover:bg-[#20242b]">
-              <Upload size={22} className="mb-3 text-[#d6a354]" />
-              <span className="text-[12px] font-semibold text-[#dfe3e8]">{fileName ? 'Replace aligned image' : 'Upload a top-down dayan image'}</span>
-              <span className="mt-2 max-w-[310px] text-[10px] leading-4 text-[#707985]">{fileName || 'JPG, PNG, or WebP. Detection runs locally after selection.'}</span>
+            <label className="flex min-h-[190px] cursor-pointer flex-col items-center justify-center border border-dashed border-border bg-muted px-6 text-center transition hover:border-primary/70 hover:bg-muted">
+              <Upload size={22} className="mb-3 text-primary" />
+              <span className="text-[12px] font-semibold text-foreground">{fileName ? 'Replace aligned image' : 'Upload a top-down dayan image'}</span>
+              <span className="mt-2 max-w-[310px] text-[10px] leading-4 text-muted-foreground">{fileName || 'JPG, PNG, or WebP. Detection runs locally after selection.'}</span>
               <input data-testid="input-new-measurement-image" className="sr-only" type="file" accept="image/*" onChange={onImageChange} />
             </label>
-            <div className={`flex items-center justify-between border px-3 py-3 font-mono text-[9px] uppercase tracking-[.12em] ${geometry ? 'border-[#82c8a0]/30 bg-[#193026] text-[#9fdbb6]' : 'border-[#303742] bg-[#1c2026] text-[#737c88]'}`}>
+            <div className={`flex items-center justify-between border px-3 py-3 font-mono text-[9px] uppercase tracking-[.12em] ${geometry ? 'border-emerald-600/30 bg-emerald-950/50 text-emerald-200' : 'border-border bg-muted text-muted-foreground'}`}>
               <span>{geometry ? 'Photo ready for alignment review' : 'Waiting for image'}</span>
               <span>{geometry ? 'Review in session' : 'Not ready'}</span>
             </div>
           </div>
         </section>
-        <section className="panel-inset border border-[#2d333d] bg-[#171a20]">
-          <div className="border-b border-[#292f38] px-5 py-4">
-            <div className="flex items-center gap-2"><SlidersHorizontal size={15} className="text-[#d6a354]" /><h3 className="text-[12px] font-semibold text-[#dfe3e8]">Pass settings</h3></div>
-            <p className="mt-2 text-[11px] leading-5 text-[#7d8692]">These settings apply to the next tuning session.</p>
+        <section className="panel-inset border border-border bg-card">
+          <div className="border-b border-border px-5 py-4">
+            <div className="flex items-center gap-2"><SlidersHorizontal size={15} className="text-primary" /><h3 className="text-[12px] font-semibold text-foreground">Pass settings</h3></div>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">These settings apply to the next tuning session.</p>
           </div>
           <div className="space-y-5 p-5">
-            <label htmlFor="new-target-note" className="block font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]">Target note</label>
-            <select id="new-target-note" data-testid="select-new-target-note" value={targetNote} onChange={(event) => onTargetNoteChange(event.target.value)} className="w-full border border-[#39414b] bg-[#1c2026] px-3 py-3 text-[13px] font-semibold text-[#e4e7ea] outline-none focus:border-[#d6a354]">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select>
+            <label htmlFor="new-target-note" className="block font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground">Target note</label>
+            <select id="new-target-note" data-testid="select-new-target-note" value={targetNote} onChange={(event) => onTargetNoteChange(event.target.value)} className="w-full border border-border bg-muted px-3 py-3 text-[13px] font-semibold text-foreground outline-none focus:border-primary">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select>
             <div>
-              <div className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-[#737c88]"><span>In tune tolerance</span><span className="text-[#d6a354]">±{tolerance} cents</span></div>
-              <div className="grid grid-cols-4 border border-[#39414b] bg-[#1c2026] p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} onClick={() => onToleranceChange(value)} className={`py-2 font-mono text-[10px] ${tolerance === value ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691] hover:text-[#d9dde4]'}`}>±{value}¢</button>)}</div>
+              <div className="mb-2 flex items-center justify-between font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground"><span>In tune tolerance</span><span className="text-primary">±{tolerance} cents</span></div>
+              <div className="grid grid-cols-4 border border-border bg-muted p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} onClick={() => onToleranceChange(value)} className={`py-2 font-mono text-[10px] ${tolerance === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>±{value}¢</button>)}</div>
             </div>
-            <div className="border-l border-[#d6a354]/50 bg-[#1b1f25] px-4 py-3 text-[10px] leading-4 text-[#89919d]">Microphone state: <strong className="text-[#d6a354]">off</strong>. You will start and stop it manually inside the session.</div>
+            <div className="border-l border-primary/50 bg-muted px-4 py-3 text-[10px] leading-4 text-muted-foreground">Microphone state: <strong className="text-primary">off</strong>. You will start and stop it manually inside the session.</div>
             <div className="flex gap-3 pt-2">
-              <button onClick={onReset} className="flex flex-1 items-center justify-center gap-2 border border-[#39414a] bg-[#20252c] px-3 py-3 font-mono text-[10px] uppercase tracking-[.1em] text-[#b5bdc7] hover:border-[#d6a354]/60"><RotateCcw size={13} />Clear pass</button>
-              <button onClick={onOpenSession} className="flex flex-[1.35] items-center justify-center gap-2 bg-[#d6a354] px-3 py-3 font-mono text-[10px] uppercase tracking-[.1em] text-[#191a1d] hover:bg-[#e4b86b]">Open tuning session <Crosshair size={13} /></button>
+              <button onClick={onReset} className="flex flex-1 items-center justify-center gap-2 border border-border bg-muted px-3 py-3 font-mono text-[10px] uppercase tracking-[.1em] text-foreground hover:border-primary/60"><RotateCcw size={13} />Clear pass</button>
+              <button onClick={onOpenSession} className="flex flex-[1.35] items-center justify-center gap-2 bg-primary px-3 py-3 font-mono text-[10px] uppercase tracking-[.1em] text-primary-foreground hover:bg-primary">Open tuning session <Crosshair size={13} /></button>
             </div>
           </div>
         </section>
@@ -754,63 +803,47 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
   const [activeStep, setActiveStep] = useState(0);
   const stepRefs = useRef<Array<HTMLElement | null>>([]);
   const steps = [
-    { number: '01', kicker: 'Photo setup', title: 'Make the photo your map.', body: 'Fit the head, then tap a unique mark to set orientation. The mark tells you which physical area is R1.', detail: 'Drag · pinch · rotate', visual: 'photo' },
-    { number: '02', kicker: 'Region setup', title: 'Give R1 its real width.', body: 'Select the two edge straps around R1. Strap 2 sits between straps 1 and 3; every next region shares an edge.', detail: 'R1 1–3 · R2 3–5', visual: 'regions' },
+    { number: '01', kicker: 'Photo setup', title: 'Make the photo your map.', body: 'Fit the head, then tap a unique mark to set orientation. The mark tells you which physical area is region 1.', detail: 'Drag · pinch · rotate', visual: 'photo' },
+    { number: '02', kicker: 'Region setup', title: 'Give region 1 its real width.', body: 'Select the two edge straps around region 1. Strap 2 sits between straps 1 and 3; every next region shares an edge.', detail: 'region 1 → region 2', visual: 'regions' },
     { number: '03', kicker: 'Tuning pass', title: 'Follow the highlight around.', body: 'Start the microphone only when ready. Strike the highlighted region three times, then continue clockwise.', detail: '3 clean strikes per region', visual: 'audio' },
   ] as const;
-  const step = steps[activeStep];
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (!visible) return;
-        const nextIndex = Number((visible.target as HTMLElement).dataset.stepIndex);
-        if (Number.isInteger(nextIndex)) setActiveStep(nextIndex);
-      },
-      { rootMargin: '-38% 0px -38% 0px', threshold: [0.15, 0.35, 0.6, 0.85] },
-    );
-    stepRefs.current.forEach((node) => node && observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
 
   const jumpToStep = (index: number) => {
+    setActiveStep(index);
     stepRefs.current[index]?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   };
 
   return (
-    <div className="guide-stage mx-auto max-w-[1320px] p-4 md:p-7">
-      <section className="guide-hero">
-        <div className="guide-hero-copy">
-          <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[#d6a354]"><span className="h-px w-5 bg-[#d6a354]" />03 / field guide</div>
-          <h2>Turn one photo into a repeatable tuning pass.</h2>
-          <p>Scroll through the ritual: orient the head, divide the surface, then listen for balance.</p>
-        </div>
-        <div className="guide-hero-mark" aria-hidden="true"><span>DAYAN</span><strong>R1</strong><small>orientation first</small><i /></div>
-      </section>
+    <div className="guide-stage">
+      <BackgroundPaths
+        title="Get the Perfect Tune"
+        onCta={onOpenSession}
+      />
 
-      <section className="guide-scroll-story" aria-label="How a tuning pass works">
-        <aside className="guide-story-visual-wrap" aria-label="Guide progress">
-          <div className="guide-story-visual-sticky">
-            <div className="guide-story-topline"><span>FIELD NOTES</span><span>{step.number} / 03</span></div>
-            <div key={step.number} className={`guide-story-visual guide-visual-${step.visual}`} aria-hidden="true">
-              {step.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div><span className="guide-visual-caption">orientation mark locked</span></>}
-              {step.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div><span className="guide-visual-caption">shared edges / clockwise</span></>}
-              {step.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div><span className="guide-visual-caption">stable clusters reveal the note</span></>}
-            </div>
-            <div className="guide-story-progress" aria-hidden="true"><span style={{ transform: `scaleX(${(activeStep + 1) / steps.length})` }} /></div>
+      <section className="guide-grid" aria-label="How a tuning pass works">
+        <div className="guide-grid-intro">
+          <div>
+            <span className="guide-kicker">THE PASS / 03 MOVES</span>
+            <h3>One surface. Three deliberate moves.</h3>
+            <p>Each card isolates one decision so the image, instruction, and next action stay clear while you move through the pass.</p>
+          </div>
+          <div className="guide-grid-controls">
+            <div className="guide-story-progress" aria-hidden="true"><span style={{ width: `${((activeStep + 1) / steps.length) * 100}%` }} /></div>
             <nav className="guide-story-nav" aria-label="Jump to guide step">{steps.map((item, index) => <button key={item.number} aria-current={activeStep === index ? 'step' : undefined} className={activeStep === index ? 'active' : ''} onClick={() => jumpToStep(index)}><span>{item.number}</span><small>{item.kicker}</small></button>)}</nav>
           </div>
-        </aside>
-        <div className="guide-story-copy">
-          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} className={`guide-story-step ${activeStep === index ? 'is-active' : ''}`}>
-            <span className="guide-kicker">{item.number} / {item.kicker}</span>
-            <h3>{item.title}</h3>
-            <p>{item.body}</p>
-            <span className="guide-detail">{item.detail}</span>
-            <span className="guide-step-line" aria-hidden="true" />
+        </div>
+
+        <div className="guide-grid-list">
+          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} onMouseEnter={() => setActiveStep(index)} className={`guide-grid-card ${activeStep === index ? 'is-active' : ''}`}>
+            <div className="guide-grid-card-top"><span className="guide-kicker">{item.number} / {item.kicker}</span><span className="guide-card-state">{activeStep === index ? 'current' : 'next'}</span></div>
+            <div className={`guide-grid-visual guide-visual-${item.visual}`} aria-hidden="true">
+              <div className="guide-visual-art">
+                {item.visual === 'photo' && <img className="guide-supplied-image guide-supplied-tabla" src="/guide/tabla-centered.png" alt="" draggable="false" />}
+                {item.visual === 'regions' && <img className="guide-supplied-image guide-supplied-regions" src="/guide/region-map.png" alt="" draggable="false" />}
+                {item.visual === 'audio' && <Waveform bars={30} intensity="medium" variant="success" />}
+              </div>
+            </div>
+            <div className="guide-grid-copy"><span className="guide-grid-caption">{item.visual === 'photo' ? 'Orientation mark locked' : item.visual === 'regions' ? 'Shared edges / clockwise' : 'Stable clusters reveal the note'}</span><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>
           </article>)}
         </div>
       </section>
@@ -823,20 +856,20 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
 function SettingsView({ targetNote, tolerance, micState, onTargetNoteChange, onToleranceChange, onOpenSession }: { targetNote: string; tolerance: number; micState: MicState; onTargetNoteChange: (value: string) => void; onToleranceChange: (value: number) => void; onOpenSession: () => void }) {
   return (
     <div className="mx-auto max-w-[920px] p-4 md:p-7">
-      <section className="mb-6 border-b border-[#282d36] pb-6">
-        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[#d6a354]"><span className="h-px w-5 bg-[#d6a354]" />04 / instrument</div>
-        <h2 className="text-3xl font-semibold tracking-[-.05em] text-[#eef0f2]">Tune the way you work.</h2>
-        <p className="mt-3 max-w-[620px] text-[12px] leading-5 text-[#818995]">Target and tolerance are session-wide controls. Microphone access is always user-triggered and is currently {micState === 'ready' ? 'active' : 'off'}.</p>
+      <section className="mb-6 border-b border-border pb-6">
+        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-primary"><span className="h-px w-5 bg-primary" />04 / instrument</div>
+        <h2 className="text-3xl font-semibold tracking-[-.05em] text-foreground">Tune the way you work.</h2>
+        <p className="mt-3 max-w-[620px] text-[12px] leading-5 text-muted-foreground">Target and tolerance are session-wide controls. Microphone access is always user-triggered and is currently {micState === 'ready' ? 'active' : 'off'}.</p>
       </section>
       <div className="space-y-4">
-        <section className="panel-inset border border-[#2d333d] bg-[#171a20] p-5">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h3 className="text-[13px] font-semibold text-[#dfe3e8]">Target pitch</h3><p className="mt-1 text-[11px] text-[#737c88]">Choose the note the eight regions will be compared against.</p></div><select data-testid="select-settings-target-note" value={targetNote} onChange={(event) => onTargetNoteChange(event.target.value)} className="border border-[#39414b] bg-[#1c2026] px-3 py-3 text-[13px] font-semibold text-[#e4e7ea] outline-none focus:border-[#d6a354]">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select></div>
+        <section className="panel-inset border border-border bg-card p-5">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h3 className="text-[13px] font-semibold text-foreground">Target pitch</h3><p className="mt-1 text-[11px] text-muted-foreground">Choose the note the eight regions will be compared against.</p></div><select data-testid="select-settings-target-note" value={targetNote} onChange={(event) => onTargetNoteChange(event.target.value)} className="border border-border bg-muted px-3 py-3 text-[13px] font-semibold text-foreground outline-none focus:border-primary">{SUPPORTED_NOTES.map((note) => <option key={note} value={note}>{note} — {formatHz(noteNameToFrequency(note))} Hz</option>)}</select></div>
         </section>
-        <section className="panel-inset border border-[#2d333d] bg-[#171a20] p-5">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h3 className="text-[13px] font-semibold text-[#dfe3e8]">Pass tolerance</h3><p className="mt-1 text-[11px] text-[#737c88]">A region is green when its median reading falls inside this band.</p></div><div className="grid grid-cols-4 border border-[#39414b] bg-[#1c2026] p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} onClick={() => onToleranceChange(value)} className={`px-4 py-2 font-mono text-[10px] ${tolerance === value ? 'bg-[#d6a354] text-[#191a1d]' : 'text-[#7d8691] hover:text-[#d9dde4]'}`}>±{value}¢</button>)}</div></div>
+        <section className="panel-inset border border-border bg-card p-5">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h3 className="text-[13px] font-semibold text-foreground">Pass tolerance</h3><p className="mt-1 text-[11px] text-muted-foreground">A region is green when its median reading falls inside this band.</p></div><div className="grid grid-cols-4 border border-border bg-muted p-0.5">{TARGET_TOLERANCES.map((value) => <button key={value} onClick={() => onToleranceChange(value)} className={`px-4 py-2 font-mono text-[10px] ${tolerance === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>±{value}¢</button>)}</div></div>
         </section>
-        <section className="panel-inset border border-[#2d333d] bg-[#171a20] p-5"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center border border-[#4a5059] bg-[#1c2026]"><Mic size={15} className="text-[#d6a354]" /></div><div><h3 className="text-[13px] font-semibold text-[#dfe3e8]">Microphone privacy</h3><p className="mt-1 text-[11px] text-[#737c88]">The tuner never starts the stream automatically. Use Start microphone in the session, then Stop microphone when done.</p></div></div></section>
-        <button onClick={onOpenSession} className="flex items-center gap-2 border border-[#d6a354]/40 bg-[#d6a354]/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[.12em] text-[#e9c887] hover:bg-[#d6a354]/15">Return to tuning session <Crosshair size={13} /></button>
+        <section className="panel-inset border border-border bg-card p-5"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center border border-border bg-muted"><Mic size={15} className="text-primary" /></div><div><h3 className="text-[13px] font-semibold text-foreground">Microphone privacy</h3><p className="mt-1 text-[11px] text-muted-foreground">The tuner never starts the stream automatically. Use Start microphone in the session, then Stop microphone when done.</p></div></div></section>
+        <button onClick={onOpenSession} className="flex items-center gap-2 border border-primary/40 bg-primary/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[.12em] text-primary hover:bg-primary/15">Return to tuning session <Crosshair size={13} /></button>
       </div>
     </div>
   );
@@ -856,11 +889,11 @@ function HeatRow({ region, targetHz, tolerance, active, disabled, onHover, onCli
   const cents = region.averageFrequency == null ? null : centsDifference(region.averageFrequency, targetHz);
   const color = heatColor(region, targetHz, tolerance);
   const width = cents == null ? 7 : Math.max(10, 100 - Math.min(92, Math.abs(cents) * 1.2));
-  return <button data-testid={`row-region-${region.id}`} disabled={disabled} aria-label={`Region ${region.id}, ${region.label}, ${statusLabel(status)}`} onFocus={() => onHover(region.id)} onBlur={() => onHover(null)} onMouseEnter={() => onHover(region.id)} onMouseLeave={() => onHover(null)} onClick={onClick} className={`grid w-full grid-cols-[minmax(90px,1.2fr)_minmax(20px,1fr)_55px_54px] items-center gap-2 py-3 text-left transition hover:bg-[#1d2229] ${active ? 'bg-[#1b2026]' : ''}`}><span className="font-mono text-[10px] uppercase tracking-[.1em] text-[#aeb6c0]">R{region.id} <span className="text-[#929ba7]">{region.short}</span><span className="mt-1 block font-sans text-[10px] normal-case tracking-normal text-[#929ba7]">{region.id === 1 ? 'Anchored · 3 straps' : '3 straps · shared edges'}</span></span><div className="relative h-2 bg-[#282f37]"><div className="h-full transition-[width]" style={{ width: `${width}%`, backgroundColor: color }} /><span className="absolute left-1/2 top-1/2 h-3 w-px -translate-y-1/2 bg-[#8a929c]" /></div><span className="text-right font-mono text-[10px]" style={{ color: cents == null ? '#626b76' : color }}>{cents == null ? '—' : formatCents(cents)}</span><span className="text-right font-mono text-[9px] uppercase tracking-[.08em] text-[#68717c]">{statusLabel(status)}</span></button>;
+  return <button data-testid={`row-region-${region.id}`} disabled={disabled} aria-label={`Region ${region.id}, ${region.label}, ${statusLabel(status)}`} onFocus={() => onHover(region.id)} onBlur={() => onHover(null)} onMouseEnter={() => onHover(region.id)} onMouseLeave={() => onHover(null)} onClick={onClick} className={`grid w-full grid-cols-[minmax(90px,1.2fr)_minmax(20px,1fr)_55px_54px] items-center gap-2 py-3 text-left transition hover:bg-muted ${active ? 'bg-muted' : ''}`}><span className="font-mono text-[10px] uppercase tracking-[.1em] text-muted-foreground">R{region.id} <span className="text-muted-foreground">{region.short}</span><span className="mt-1 block font-sans text-[10px] normal-case tracking-normal text-muted-foreground">{region.id === 1 ? 'Anchored · 3 straps' : '3 straps · shared edges'}</span></span><div className="relative h-2 bg-muted"><div className="h-full transition-[width]" style={{ width: `${width}%`, backgroundColor: color }} /><span className="absolute left-1/2 top-1/2 h-3 w-px -translate-y-1/2 bg-muted" /></div><span className="text-right font-mono text-[10px]" style={{ color: cents == null ? '#626b76' : color }}>{cents == null ? '—' : formatCents(cents)}</span><span className="text-right font-mono text-[9px] uppercase tracking-[.08em] text-muted-foreground">{statusLabel(status)}</span></button>;
 }
 
 function GuidanceLine({ number, title, body }: { number: string; title: string; body: string }) {
-  return <div className="relative"><span className="absolute -left-[21px] top-0 flex h-3 w-3 items-center justify-center bg-[#171a20] font-mono text-[8px] text-[#d6a354]">{number}</span><p className="text-[11px] font-semibold text-[#c9d0d7]">{title}</p><p className="mt-1 text-[10px] leading-4 text-[#717a85]">{body}</p></div>;
+  return <div className="relative"><span className="absolute -left-[21px] top-0 flex h-3 w-3 items-center justify-center bg-card font-mono text-[8px] text-primary">{number}</span><p className="text-[11px] font-semibold text-foreground">{title}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{body}</p></div>;
 }
 
 export default App;
