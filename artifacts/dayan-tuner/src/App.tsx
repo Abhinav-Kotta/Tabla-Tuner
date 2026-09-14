@@ -758,7 +758,6 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
     { number: '02', kicker: 'Region setup', title: 'Give R1 its real width.', body: 'Select the two edge straps around R1. Strap 2 sits between straps 1 and 3; every next region shares an edge.', detail: 'R1 1–3 · R2 3–5', visual: 'regions' },
     { number: '03', kicker: 'Tuning pass', title: 'Follow the highlight around.', body: 'Start the microphone only when ready. Strike the highlighted region three times, then continue clockwise.', detail: '3 clean strikes per region', visual: 'audio' },
   ] as const;
-  const step = steps[activeStep];
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -791,29 +790,31 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
         <div className="guide-hero-mark" aria-hidden="true"><span>DAYAN</span><strong>R1</strong><small>orientation first</small><i /></div>
       </section>
 
-      <section className="guide-scroll-story" aria-label="How a tuning pass works">
-        <aside className="guide-story-visual-wrap" aria-label="Guide progress">
-          <div className="guide-story-visual-sticky">
-            <div className="guide-story-topline"><span>FIELD NOTES</span><span>{step.number} / 03</span></div>
-            <div key={step.number} className={`guide-story-visual guide-visual-${step.visual}`} aria-hidden="true">
-              <div className="guide-visual-art">
-                {step.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div></>}
-                {step.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div></>}
-                {step.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div></>}
-              </div>
-              <span className="guide-visual-caption">{step.visual === 'photo' ? 'orientation mark locked' : step.visual === 'regions' ? 'shared edges / clockwise' : 'stable clusters reveal the note'}</span>
-            </div>
+      <section className="guide-grid" aria-label="How a tuning pass works">
+        <div className="guide-grid-intro">
+          <div>
+            <span className="guide-kicker">THE PASS / 03 MOVES</span>
+            <h3>One surface. Three deliberate moves.</h3>
+            <p>Each card isolates one decision so the image, instruction, and next action stay clear while you move through the pass.</p>
+          </div>
+          <div className="guide-grid-controls">
             <div className="guide-story-progress" aria-hidden="true"><span style={{ transform: `scaleX(${(activeStep + 1) / steps.length})` }} /></div>
             <nav className="guide-story-nav" aria-label="Jump to guide step">{steps.map((item, index) => <button key={item.number} aria-current={activeStep === index ? 'step' : undefined} className={activeStep === index ? 'active' : ''} onClick={() => jumpToStep(index)}><span>{item.number}</span><small>{item.kicker}</small></button>)}</nav>
           </div>
-        </aside>
-        <div className="guide-story-copy">
-          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} className={`guide-story-step ${activeStep === index ? 'is-active' : ''}`}>
-            <span className="guide-kicker">{item.number} / {item.kicker}</span>
-            <h3>{item.title}</h3>
-            <p>{item.body}</p>
-            <span className="guide-detail">{item.detail}</span>
-            <span className="guide-step-line" aria-hidden="true" />
+        </div>
+
+        <div className="guide-grid-list">
+          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} className={`guide-grid-card ${activeStep === index ? 'is-active' : ''}`}>
+            <div className="guide-grid-card-top"><span className="guide-kicker">{item.number} / {item.kicker}</span><span className="guide-card-state">{activeStep === index ? 'current' : 'next'}</span></div>
+            <div className={`guide-grid-visual guide-visual-${item.visual}`} aria-hidden="true">
+              <div className="guide-visual-art">
+                {item.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div></>}
+                {item.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div></>}
+                {item.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, barIndex) => <i key={barIndex} style={{ height: `${18 + ((barIndex * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div></>}
+              </div>
+              <span className="guide-visual-caption">{item.visual === 'photo' ? 'orientation mark locked' : item.visual === 'regions' ? 'shared edges / clockwise' : 'stable clusters reveal the note'}</span>
+            </div>
+            <div className="guide-grid-copy"><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>
           </article>)}
         </div>
       </section>
