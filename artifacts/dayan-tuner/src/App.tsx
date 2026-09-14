@@ -754,8 +754,8 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
   const [activeStep, setActiveStep] = useState(0);
   const stepRefs = useRef<Array<HTMLElement | null>>([]);
   const steps = [
-    { number: '01', kicker: 'Photo setup', title: 'Make the photo your map.', body: 'Fit the head, then tap a unique mark to set orientation. The mark tells you which physical area is R1.', detail: 'Drag · pinch · rotate', visual: 'photo' },
-    { number: '02', kicker: 'Region setup', title: 'Give R1 its real width.', body: 'Select the two edge straps around R1. Strap 2 sits between straps 1 and 3; every next region shares an edge.', detail: 'R1 1–3 · R2 3–5', visual: 'regions' },
+    { number: '01', kicker: 'Photo setup', title: 'Make the photo your map.', body: 'Fit the head, then tap a unique mark to set orientation. The mark tells you which physical area is region 1.', detail: 'Drag · pinch · rotate', visual: 'photo' },
+    { number: '02', kicker: 'Region setup', title: 'Give region 1 its real width.', body: 'Select the two edge straps around region 1. Strap 2 sits between straps 1 and 3; every next region shares an edge.', detail: 'region 1 → region 2', visual: 'regions' },
     { number: '03', kicker: 'Tuning pass', title: 'Follow the highlight around.', body: 'Start the microphone only when ready. Strike the highlighted region three times, then continue clockwise.', detail: '3 clean strikes per region', visual: 'audio' },
   ] as const;
 
@@ -787,7 +787,7 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
           <h2>Turn one photo into a repeatable tuning pass.</h2>
           <p>Scroll through the ritual: orient the head, divide the surface, then listen for balance.</p>
         </div>
-        <div className="guide-hero-mark" aria-hidden="true"><span>DAYAN</span><strong>R1</strong><small>orientation first</small><i /></div>
+        <div className="guide-hero-mark" aria-hidden="true"><span>DAYAN</span><strong>01</strong><small>region first</small><i /></div>
       </section>
 
       <section className="guide-grid" aria-label="How a tuning pass works">
@@ -808,13 +808,12 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
             <div className="guide-grid-card-top"><span className="guide-kicker">{item.number} / {item.kicker}</span><span className="guide-card-state">{activeStep === index ? 'current' : 'next'}</span></div>
             <div className={`guide-grid-visual guide-visual-${item.visual}`} aria-hidden="true">
               <div className="guide-visual-art">
-                {item.visual === 'photo' && <><div className="guide-photo-ring"><span className="guide-photo-dot">A</span><i /></div><div className="guide-gesture">↔ &nbsp; pinch to zoom</div></>}
-                {item.visual === 'regions' && <><div className="guide-region-dial"><i /><b>R1</b><span>1—3</span><em>R2&nbsp; 3—5</em></div><div className="guide-strap-line">1&nbsp;&nbsp; 2&nbsp;&nbsp; 3&nbsp;&nbsp; 4&nbsp;&nbsp; 5</div></>}
-                {item.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, barIndex) => <i key={barIndex} style={{ height: `${18 + ((barIndex * 17) % 48)}%` }} />)}</div><div className="guide-audio-chip">● listening · 03 / 03</div></>}
+                {item.visual === 'photo' && <div className="guide-photo-ring"><i /></div>}
+                {item.visual === 'regions' && <div className="guide-region-dial"><i /><span className="guide-region-label guide-region-label-1">R1</span><span className="guide-region-label guide-region-label-2">R2</span><span className="guide-region-label guide-region-label-3">R3</span><span className="guide-region-label guide-region-label-4">R4</span></div>}
+                {item.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, barIndex) => <i key={barIndex} style={{ height: `${18 + ((barIndex * 17) % 48)}%` }} />)}</div><svg className="guide-recording-wave" viewBox="0 0 320 72" role="img" aria-label="Recording soundwave"><path d="M4 38h14l7-8 7 18 8-30 8 43 8-29 8 17 8-8 8 4 8-16 8 35 8-48 8 61 8-36 8 12 8-6 8 8 8-20 8 29 8-44 8 55 8-35 8 14 8-8 8 3 8-15 8 31 8-42 8 51 8-30 8 13 8-6 8 2 8-13 8 26 8-36 8 43 8-26 8 11 8-5 8 2 8-9 8 18 8-25 8 28 8-17 8 8 14 0" /></svg></>}
               </div>
-              <span className="guide-visual-caption">{item.visual === 'photo' ? 'orientation mark locked' : item.visual === 'regions' ? 'shared edges / clockwise' : 'stable clusters reveal the note'}</span>
             </div>
-            <div className="guide-grid-copy"><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>
+            <div className="guide-grid-copy"><span className="guide-grid-caption">{item.visual === 'photo' ? 'Orientation mark locked' : item.visual === 'regions' ? 'Shared edges / clockwise' : 'Stable clusters reveal the note'}</span><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>
           </article>)}
         </div>
       </section>
