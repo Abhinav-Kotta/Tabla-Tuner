@@ -38,6 +38,8 @@ import { PhotoCanvas } from './components/photo-canvas';
 import { PhotoSetupModal } from './components/photo-setup-modal';
 import { PhotoInteraction } from './components/photo-interaction';
 import { StrapBoundaries } from './components/strap-boundaries';
+import { BackgroundPaths } from './components/ui/background-paths';
+import { Waveform } from './components/ui/waveform';
 import { autofillBoundaries, boundaryArc, moveBoundary, strapRange, type PhotoAnchor } from './vision/photoMapping';
 import { detectTablaHead, renderTablaReference, type HeadGeometry } from './vision/tablaDetection';
 
@@ -799,14 +801,12 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
 
   return (
     <div className="guide-stage mx-auto max-w-[1320px] p-4 md:p-7">
-      <section className="guide-hero">
-        <div className="guide-hero-copy">
-          <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.2em] text-[#d6a354]"><span className="h-px w-5 bg-[#d6a354]" />03 / field guide</div>
-          <h2>Turn one photo into a repeatable tuning pass.</h2>
-          <p>Scroll through the ritual: orient the head, divide the surface, then listen for balance.</p>
-        </div>
-        <div className="guide-hero-mark" aria-hidden="true"><span>DAYAN</span><strong>01</strong><small>region first</small><i /></div>
-      </section>
+      <BackgroundPaths
+        eyebrow="03 / field guide"
+        title="Hear the whole head."
+        subtitle="A photo gives the tuner its map. A clean strike gives it a note. Follow the pass from orientation to balance."
+        onCta={onOpenSession}
+      />
 
       <section className="guide-grid" aria-label="How a tuning pass works">
         <div className="guide-grid-intro">
@@ -828,7 +828,7 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
               <div className="guide-visual-art">
                 {item.visual === 'photo' && <img className="guide-supplied-image guide-supplied-tabla" src="/guide/tabla-centered.png" alt="" draggable="false" />}
                 {item.visual === 'regions' && <img className="guide-supplied-image guide-supplied-regions" src="/guide/region-map.png" alt="" draggable="false" />}
-                {item.visual === 'audio' && <img className="guide-supplied-image guide-supplied-waveform" src="/guide/recording-waveform.png" alt="" draggable="false" />}
+                {item.visual === 'audio' && <Waveform bars={30} playing intensity="medium" variant="success" />}
               </div>
             </div>
             <div className="guide-grid-copy"><span className="guide-grid-caption">{item.visual === 'photo' ? 'Orientation mark locked' : item.visual === 'regions' ? 'Shared edges / clockwise' : 'Stable clusters reveal the note'}</span><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>
