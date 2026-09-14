@@ -76,7 +76,7 @@ const REGIONS: Region[] = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 const TARGET_TOLERANCES = [3, 5, 10, 15];
-const MAX_STRIKE_VARIANCE_CENTS = 80;
+const MAX_STRIKE_VARIANCE_CENTS = 140;
 const STRIKE_CAPTURE_WINDOW_MS = 180;
 
 function freshRegions(): Region[] {
@@ -85,6 +85,17 @@ function freshRegions(): Region[] {
 
 function formatHz(value: number | null): string {
   return value == null || !Number.isFinite(value) ? '—' : value.toFixed(2);
+}
+
+function normalizeFrequencyToReference(frequency: number, reference: number): number {
+  if (!Number.isFinite(frequency) || !Number.isFinite(reference) || reference <= 0) return Number.NaN;
+
+  let normalized = frequency;
+  // Autocorrelation can occasionally choose the octave above or below. Fold
+  // that candidate into the reference octave before comparing strike spread.
+  while (normalized / reference > 1.5) normalized /= 2;
+  while (normalized / reference < 0.667) normalized *= 2;
+  return normalized;
 }
 
 function getRegionStatus(region: Region, targetHz: number, tolerance: number): TuningStatus | 'awaiting' {
@@ -218,23 +229,45 @@ function TunerConsole() {
     const current = regionsRef.current.find((region) => region.id === regionId);
     if (!current || current.strikes.length >= 3) return;
 
-    if (confidence < 0.46 || !Number.isFinite(frequency)) {
+    const reference = current.strikes.length > 0 ? median(current.strikes) : target;
+    const normalizedFrequency = normalizeFrequencyToReference(frequency, reference);
+
+    if (confidence < 0.46 || !Number.isFinite(normalizedFrequency)) {
       setRejectedCount((count) => count + 1);
-      setMessage('Pitch unclear. Strike the highlighted area again.');
+      setMessage('No stable pitch registered. Strike once, let it ring, and try again.');
       return;
     }
 
     if (current.strikes.length > 0) {
       const center = median(current.strikes);
-      const spread = Math.abs(centsDifference(frequency, center));
+      const signedDifference = centsDifference(normalizedFrequency, center);
+      const spread = Math.abs(signedDifference);
       if (!Number.isFinite(spread) || spread > MAX_STRIKE_VARIANCE_CENTS) {
+        const candidateTargetDistance = Math.abs(centsDifference(normalizedFrequency, target));
+        const centerTargetDistance = Math.abs(centsDifference(center, target));
+
+        // If the first accepted strike was an octave/error outlier, allow a
+        // clearly better candidate to restart the cluster instead of trapping
+        // every later strike behind the stale reference.
+        if (current.strikes.length === 1 && candidateTargetDistance + 60 < centerTargetDistance) {
+          const nextRegions = regionsRef.current.map((region) =>
+            region.id === regionId
+              ? { ...region, strikes: [normalizedFrequency], averageFrequency: null, confidence: Math.min(1, confidence) }
+              : region,
+          );
+          regionsRef.current = nextRegions;
+          setRegions(nextRegions);
+          setMessage('The first reading was unstable. Re-centered on the clearer strike; repeat it twice.');
+          return;
+        }
+
         setRejectedCount((count) => count + 1);
-        setMessage('That strike was inconsistent. Try again.');
+        setMessage(`Pitch jump ${formatCents(signedDifference)}. Keep the same spot, let it ring, and strike again.`);
         return;
       }
     }
 
-    const strikes = [...current.strikes, frequency];
+    const strikes = [...current.strikes, normalizedFrequency];
     const averageFrequency = strikes.length === 3 ? median(strikes) : null;
     const nextRegions = regionsRef.current.map((region) =>
       region.id === regionId
@@ -267,7 +300,7 @@ function TunerConsole() {
     strikeCaptureRef.current = null;
     if (capture.samples.length === 0) {
       setRejectedCount((count) => count + 1);
-      setMessage('Pitch unclear. Strike the highlighted area again.');
+      setMessage('No stable pitch registered. Strike once, let it ring, and try again.');
       return;
     }
 
@@ -759,23 +792,8 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
     { number: '03', kicker: 'Tuning pass', title: 'Follow the highlight around.', body: 'Start the microphone only when ready. Strike the highlighted region three times, then continue clockwise.', detail: '3 clean strikes per region', visual: 'audio' },
   ] as const;
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (!visible) return;
-        const nextIndex = Number((visible.target as HTMLElement).dataset.stepIndex);
-        if (Number.isInteger(nextIndex)) setActiveStep(nextIndex);
-      },
-      { rootMargin: '-38% 0px -38% 0px', threshold: [0.15, 0.35, 0.6, 0.85] },
-    );
-    stepRefs.current.forEach((node) => node && observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
-
   const jumpToStep = (index: number) => {
+    setActiveStep(index);
     stepRefs.current[index]?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
   };
 
@@ -804,7 +822,7 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
         </div>
 
         <div className="guide-grid-list">
-          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} className={`guide-grid-card ${activeStep === index ? 'is-active' : ''}`}>
+          {steps.map((item, index) => <article key={item.number} ref={(node) => { stepRefs.current[index] = node; }} data-step-index={index} tabIndex={-1} onMouseEnter={() => setActiveStep(index)} className={`guide-grid-card ${activeStep === index ? 'is-active' : ''}`}>
             <div className="guide-grid-card-top"><span className="guide-kicker">{item.number} / {item.kicker}</span><span className="guide-card-state">{activeStep === index ? 'current' : 'next'}</span></div>
             <div className={`guide-grid-visual guide-visual-${item.visual}`} aria-hidden="true">
               <div className="guide-visual-art">
