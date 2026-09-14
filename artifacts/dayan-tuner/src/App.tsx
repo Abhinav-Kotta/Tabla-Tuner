@@ -808,9 +808,9 @@ function GuideView({ onOpenSession }: { onOpenSession: () => void }) {
             <div className="guide-grid-card-top"><span className="guide-kicker">{item.number} / {item.kicker}</span><span className="guide-card-state">{activeStep === index ? 'current' : 'next'}</span></div>
             <div className={`guide-grid-visual guide-visual-${item.visual}`} aria-hidden="true">
               <div className="guide-visual-art">
-                {item.visual === 'photo' && <div className="guide-photo-ring"><i /></div>}
-                {item.visual === 'regions' && <div className="guide-region-dial"><i /><span className="guide-region-label guide-region-label-1">R1</span><span className="guide-region-label guide-region-label-2">R2</span><span className="guide-region-label guide-region-label-3">R3</span><span className="guide-region-label guide-region-label-4">R4</span></div>}
-                {item.visual === 'audio' && <><div className="guide-audio-bars">{Array.from({ length: 20 }, (_, barIndex) => <i key={barIndex} style={{ height: `${18 + ((barIndex * 17) % 48)}%` }} />)}</div><svg className="guide-recording-wave" viewBox="0 0 320 72" role="img" aria-label="Recording soundwave"><path d="M4 38h14l7-8 7 18 8-30 8 43 8-29 8 17 8-8 8 4 8-16 8 35 8-48 8 61 8-36 8 12 8-6 8 8 8-20 8 29 8-44 8 55 8-35 8 14 8-8 8 3 8-15 8 31 8-42 8 51 8-30 8 13 8-6 8 2 8-13 8 26 8-36 8 43 8-26 8 11 8-5 8 2 8-9 8 18 8-25 8 28 8-17 8 8 14 0" /></svg></>}
+                {item.visual === 'photo' && <img className="guide-supplied-image guide-supplied-tabla" src="/guide/tabla-centered.png" alt="" draggable="false" />}
+                {item.visual === 'regions' && <img className="guide-supplied-image guide-supplied-regions" src="/guide/region-map.png" alt="" draggable="false" />}
+                {item.visual === 'audio' && <img className="guide-supplied-image guide-supplied-waveform" src="/guide/recording-waveform.png" alt="" draggable="false" />}
               </div>
             </div>
             <div className="guide-grid-copy"><span className="guide-grid-caption">{item.visual === 'photo' ? 'Orientation mark locked' : item.visual === 'regions' ? 'Shared edges / clockwise' : 'Stable clusters reveal the note'}</span><h3>{item.title}</h3><p>{item.body}</p><span className="guide-detail">{item.detail}</span></div>

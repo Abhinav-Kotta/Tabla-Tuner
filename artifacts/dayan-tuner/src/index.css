@@ -1139,3 +1139,36 @@ button { cursor: pointer; }
   .guide-grid-visual .guide-region-dial { width: min(76vw, 280px); }
   .guide-grid-visual .guide-recording-wave { width: min(88vw, 292px); }
 }
+
+/* Supplied guide art: preserve the original aspect ratios and keep each
+   asset centered inside the card's reserved visual stage. */
+.guide-grid-visual .guide-visual-art {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+.guide-supplied-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+}
+.guide-supplied-tabla { width: min(100%, 306px); }
+.guide-supplied-regions { width: min(100%, 324px); }
+.guide-supplied-waveform {
+  width: min(100%, 320px);
+  border: 1px solid rgba(141, 219, 213, .16);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .28);
+}
+@media (max-width: 620px) {
+  .guide-supplied-tabla { width: min(100%, 306px); }
+  .guide-supplied-regions { width: min(100%, 324px); }
+  .guide-supplied-waveform { width: min(100%, 320px); }
+}
