@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "composite": true,
     "declarationMap": true,
     "emitDeclarationOnly": true,
