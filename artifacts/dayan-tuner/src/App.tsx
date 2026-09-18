@@ -594,9 +594,7 @@ function TunerConsole() {
             {!collapsed && <p className="mb-3 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-muted-foreground">Reference</p>}
             <button data-testid="button-guide" onClick={() => setActiveView('guide')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'guide' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><CircleHelp size={15} />{!collapsed && 'How it works'}</button>
             <button data-testid="button-settings" onClick={() => setActiveView('settings')} className={`flex items-center gap-3 border px-3 py-2.5 text-left text-[11px] transition ${activeView === 'settings' ? 'border-primary/30 bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground'} ${collapsed ? 'justify-center' : ''}`}><Settings2 size={15} />{!collapsed && 'Instrument settings'}</button>
-          </div>
-          <div className="border-t border-border p-3">
-            <button data-testid="button-collapse-sidebar" onClick={() => setCollapsed(!collapsed)} className="flex w-full items-center justify-center gap-2 py-2 text-muted-foreground transition hover:text-foreground" aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>{collapsed ? <PanelLeftOpen size={16} /> : <><PanelLeftClose size={16} /><span className="font-mono text-[9px] uppercase tracking-[.15em]">Collapse</span></>}</button>
+            <button data-testid="button-collapse-sidebar" onClick={() => setCollapsed(!collapsed)} className={`mt-2 flex items-center gap-3 border border-transparent px-3 py-2.5 text-left text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground ${collapsed ? 'justify-center' : ''}`} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>{collapsed ? <PanelLeftOpen size={16} /> : <><PanelLeftClose size={16} /><span>Collapse</span></>}</button>
           </div>
         </aside>
 
