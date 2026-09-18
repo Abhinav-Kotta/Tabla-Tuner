@@ -10,6 +10,7 @@ out-tsc
 
 # dependencies
 node_modules
+.pnpm-store/
 
 # IDEs and editors
 /.idea
@@ -47,3 +48,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.vercel
+.env*.local

@@ -12,6 +12,34 @@ An in-browser dayan tuner that uses local image and microphone analysis to map p
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
 
+## Vercel: build and debug locally
+
+The public tuner is the Vite app in `artifacts/dayan-tuner`. Set the Vercel
+project's **Root Directory** to `artifacts/dayan-tuner`, **Framework Preset** to
+Vite, and **Node.js Version** to 22.x. The app's `vercel.json` sets the build
+command and `dist/public` output directory. This browser-only app does not need
+the Express API or a database to run.
+
+Run these commands from the repository root:
+
+```bash
+nvm use
+pnpm dlx vercel@59.22.0 link --project tabla-tuner
+pnpm dlx vercel@59.22.0 pull --yes --environment=production
+pnpm run vercel:check
+pnpm run vercel:preview
+```
+
+`vercel:check` runs the real Vercel production build locally, then checks that
+the output contains the tuner HTML and its assets, with no server functions.
+`vercel:preview` serves that Vercel output at http://127.0.0.1:4173 for browser
+testing. Neither command deploys. Check the page and browser console, then test
+photo upload and microphone permission before deploying. Localhost supports
+microphone access; actual microphone accuracy still requires a real instrument.
+
+The linked settings and downloaded environment files stay in ignored local
+files. After changing Vercel project settings, run `pull` again before building.
+
 ## Stack
 
 - pnpm workspaces, Node.js 22.18.0 (the version in `.nvmrc`), TypeScript 5.9
