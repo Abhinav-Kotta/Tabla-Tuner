@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -104,9 +103,9 @@
   --chart-3: 42 50% 50%;
   --chart-4: 8 45% 50%;
   --chart-5: 0 0% 65%;
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: 'DM Sans', sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: 'DM Mono', monospace;
+  --app-font-mono: 'JetBrains Mono', monospace;
   --radius: 1rem;
   --button-outline: rgb(0 0 0 / .1);
   --badge-outline: rgb(0 0 0 / .05);

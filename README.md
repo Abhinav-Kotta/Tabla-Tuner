@@ -2,6 +2,25 @@
 
 An in-browser dayan tuner that uses local image and microphone analysis to map pitch consistency across eight tuning regions.
 
+## Website
+
+The homepage uses a dark, tabla-themed editorial design with the supplied tabla
+illustration, animated waveform, a bol marquee, six playable reference tones,
+and a tuning guide. Select a reference card’s arrow to open the working tuner
+with that note selected, or use **Start tuning** for the default D4 session.
+The workspace remains available at `/#tuner`; `/#tuner?note=C%234` selects C#4.
+Reference previews are synthesized sine tones, not tabla recordings.
+
+- `artifacts/dayan-tuner/src/App.tsx` — homepage, reference tones, and hash navigation
+- `artifacts/dayan-tuner/src/landing.css` — responsive website styles and dark theme
+- `artifacts/dayan-tuner/src/TunerApp.tsx` — photo mapping and live tuning workspace
+- `docs/website-artwork.md` — imagegen asset paths and final prompts
+
+The microphone starts only from inside a configured tuning session and is
+stopped when leaving the workspace. Reference tones stop after four seconds or
+when switching notes or entering the tuner. Returning home clears the current
+in-memory tuning session.
+
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
@@ -51,7 +70,7 @@ files. After changing Vercel project settings, run `pull` again before building.
 
 ## Where things live
 
-- `artifacts/dayan-tuner/src/App.tsx` — session state, measurement workflow, and main console UI
+- `artifacts/dayan-tuner/src/TunerApp.tsx` — session state, measurement workflow, and main console UI
 - `artifacts/dayan-tuner/src/audio/` — music theory, onset, microphone, and pitch analysis
 - `artifacts/dayan-tuner/src/vision/tablaDetection.ts` — local head detection and normalization
 - `artifacts/dayan-tuner/README.md` — product and DSP/CV notes
