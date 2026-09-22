@@ -1286,8 +1286,10 @@ function TunerConsole({ initialNote }: { initialNote: string }) {
                   <div className="tune-empty-state">
                     <div className="tune-empty-art">
                       <img
-                        src={`${import.meta.env.BASE_URL}images/tabla.png`}
-                        alt="Illustration of a pair of tabla drums"
+                        src={`${import.meta.env.BASE_URL}images/dayan-top-down.png`}
+                        alt="Top-down illustration of a single dayan drumhead with a black center and braided rim"
+                        width={640}
+                        height={640}
                       />
                     </div>
                     <h3>Every tabla has its own voice.</h3>

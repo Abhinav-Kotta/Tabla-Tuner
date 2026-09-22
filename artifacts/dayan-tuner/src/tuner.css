@@ -232,8 +232,9 @@
 }
 .tune-empty-art {
   margin: 0 auto 2px;
-  height: 230px;
-  max-width: 430px;
+  height: 260px;
+  width: 100%;
+  max-width: 260px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1122,7 +1123,7 @@
     font-size: 30px;
   }
   .tune-empty-art {
-    height: 230px;
+    height: 260px;
   }
   .tune-listening-panel .tune-control-body {
     display: grid;
@@ -1287,7 +1288,7 @@
     padding-inline: 20px;
   }
   .tune-empty-art {
-    height: 190px;
+    height: 210px;
   }
   .tune-empty-state h3 {
     font-size: 18px;
