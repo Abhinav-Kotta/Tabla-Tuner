@@ -1,6 +1,6 @@
 {
   "project_id": "appgprj_6aa6f80ed5748191a24b1e2e16a458b5",
   "static": {
-    "directory": "dist"
+    "directory": "artifacts/dayan-tuner/dist/public"
   }
 }

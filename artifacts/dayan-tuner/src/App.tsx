@@ -9,7 +9,6 @@ import {
 import { motion, MotionConfig, useReducedMotion } from "motion/react";
 import {
   ArrowDown,
-  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   AudioLines,
@@ -644,12 +643,6 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       {route.tuner ? (
         <div className="tuner-page">
-          <div className="workspace-topbar">
-            <a href="#">
-              <ArrowLeft size={15} /> Back to Dayan
-            </a>
-            <span className="eyebrow">YOUR INSTRUMENT. YOUR SESSION.</span>
-          </div>
           <Suspense
             fallback={
               <div className="tuner-loading">

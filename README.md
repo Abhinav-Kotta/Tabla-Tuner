@@ -14,10 +14,11 @@ Reference previews are synthesized sine tones, not tabla recordings.
 - `artifacts/dayan-tuner/src/App.tsx` — homepage, reference tones, and hash navigation
 - `artifacts/dayan-tuner/src/landing.css` — responsive website styles and dark theme
 - `artifacts/dayan-tuner/src/TunerApp.tsx` — photo mapping and live tuning workspace
+- `artifacts/dayan-tuner/src/tuner.css` — matching session, guide, settings, and photo wizard styles
 - `docs/website-artwork.md` — imagegen asset paths and final prompts
 
 The microphone starts only from inside a configured tuning session and is
-stopped when leaving the workspace. Reference tones stop after four seconds or
+stopped when leaving the workspace or switching away from the tuning tab. Reference tones stop after four seconds or
 when switching notes or entering the tuner. Returning home clears the current
 in-memory tuning session.
 
