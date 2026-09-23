@@ -44,3 +44,18 @@ Subject: one centered circular cream/tan drum skin with a round central black ch
 Composition: square canvas; entire circular rim visible; modest even transparent padding on every side; orthographic top-down plan view with a circular silhouette, no visible tall sidewall.
 Background: genuinely transparent PNG alpha, fully transparent outside the instrument, not white, black, checkerboard, or another painted background. No ground shadow.
 Constraints: one drum only, no second drum, no hands, no cushions, no scene, no text, labels, UI, dots, tuning markers, overlays or watermark. Keep a beautifully clean, simple isolated illustrated asset. Generate only one image.
+
+## dayan-region-reference.png
+
+Saved at `artifacts/dayan-tuner/public/images/dayan-region-reference.png`, 640 × 640 transparent PNG, created with built-in imagegen. Corrected to use the smaller wooden dayan on the right of the user's photo. The eight dotted regions, sixteen strap numbers, and selected region labels are a separate accessible SVG/HTML reference diagram in `src/components/region-reference.tsx`; the graphic explains region identification before the user uploads their own photo.
+
+Final image prompt:
+
+Use case: precise-object-edit.
+Asset type: transparent PNG illustration for a dayan tabla tuner.
+Primary request: Generate exactly ONE corrected illustration of a SINGLE DAYAN in a perfectly straight overhead view, using image 1's SMALLER WOODEN DRUM ON THE RIGHT as the anatomical reference. Image 2 is the existing illustration to correct and its hand-drawn painted style should be retained.
+Critical subject correction: depict the smaller right-hand wooden DAYAN from image 1, NOT the large left-hand bayan. The DAYAN has a prominent circular black central syahi, with subtle concentric rings, occupying approximately 44% of the total outer drumhead diameter. Match the cool ivory / gray skin around the syahi of that smaller right-hand drum. Include the distinct narrow cream outer ring, finely braided natural leather rim and evenly spaced leather strap loops, with warm dark brown wood only peeking around the perimeter.
+Style: polished hand-drawn painted illustration, delicate textured strokes and fine warm outlines matching image 2. Keep a rich nearly black syahi and cool gray-ivory membrane, avoiding image 2's broad yellow membrane and undersized black center.
+Composition: exact orthographic straight top-down view, absolutely no tilt or visible drum side wall. Perfect circular symmetry, drumhead and black syahi both precisely centered on a square canvas. Outer rim radius approximately 46% of canvas width, leaving 4% transparent margin on each edge (8% total padding).
+Background: TRUE transparent alpha outside the drum, no solid fill, no checkerboard painted into the image. Clean edges. No cast shadow.
+Constraints: one drum only, no second drum, no cushion, no surroundings, no text, no labels, no numbers, no radial region boundaries, no dotted sector lines, no diagrams. Preserve the illustrative style while correcting the anatomical proportions to the DAYAN on the right of image 1. Output one square transparent PNG only, no variants.

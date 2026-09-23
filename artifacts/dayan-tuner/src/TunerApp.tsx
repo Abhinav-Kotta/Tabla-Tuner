@@ -43,6 +43,7 @@ import {
   type PhotoSetupStep,
 } from "./components/photo-alignment";
 import { PhotoCanvas } from "./components/photo-canvas";
+import { RegionReference } from "./components/region-reference";
 import { PhotoSetupModal } from "./components/photo-setup-modal";
 import { PhotoInteraction } from "./components/photo-interaction";
 import { StrapBoundaries } from "./components/strap-boundaries";
@@ -1284,18 +1285,12 @@ function TunerConsole({ initialNote }: { initialNote: string }) {
                   </>
                 ) : (
                   <div className="tune-empty-state">
-                    <div className="tune-empty-art">
-                      <img
-                        src={`${import.meta.env.BASE_URL}images/dayan-top-down.png`}
-                        alt="Top-down illustration of a single dayan drumhead with a black center and braided rim"
-                        width={640}
-                        height={640}
-                      />
-                    </div>
-                    <h3>Every tabla has its own voice.</h3>
+                    <RegionReference />
+                    <h3>One head. Eight tuning regions.</h3>
                     <p>
-                      Start with a photo of yours. Include the whole dayan head,
-                      directly from above.
+                      Each region spans three straps and shares its edges with
+                      its neighbours. Select a region to see its boundary
+                      straps, then upload your photo to make your own map.
                     </p>
                   </div>
                 )}

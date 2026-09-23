@@ -1446,3 +1446,154 @@
     padding: 14px;
   }
 }
+
+/* Region identification reference: labels are separate from the artwork. */
+.region-reference {
+  margin: 0;
+}
+.tune-empty-art.region-reference-art {
+  position: relative;
+  height: auto;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 320px;
+  margin: 6px auto 10px;
+}
+.region-reference-art img {
+  position: absolute;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  filter: saturate(0.55) brightness(0.85) drop-shadow(0 12px 16px #0004);
+}
+.region-reference-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.reference-dotted {
+  fill: none;
+  stroke: #31271e;
+  stroke-width: 0.55;
+  stroke-dasharray: 0.15 1.4;
+  stroke-linecap: round;
+}
+.reference-selected-sector {
+  fill: #f5a62358;
+  stroke: #966119;
+  stroke-width: 0.35;
+}
+.reference-selected-edge {
+  stroke: #7b4511;
+  stroke-width: 0.85;
+}
+.reference-strap-pin {
+  fill: #27221b;
+  stroke: #d4be97;
+  stroke-width: 0.3;
+}
+.reference-strap-pin.selected {
+  fill: #f5a623;
+  stroke: #37260b;
+}
+.reference-strap-number {
+  fill: #ada18b;
+  font-family: var(--mono);
+  font-size: 3.5px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.reference-strap-number.selected {
+  fill: #f5c375;
+  font-weight: 600;
+}
+.reference-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+  color: #eee0c5;
+}
+.reference-center small {
+  font: 7px/1.5 var(--mono);
+  letter-spacing: 0.15em;
+  color: #c5b89d;
+}
+.reference-center strong {
+  font:
+    35px/1 "Bebas Neue",
+    sans-serif;
+  letter-spacing: 0.04em;
+}
+.reference-center span {
+  font: 8px/1.5 var(--mono);
+  white-space: nowrap;
+}
+.reference-region-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #28221bd9;
+  color: #eee0c5;
+  border: 1px solid #b09d7850;
+  font: 10px/1 var(--mono);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.reference-region-label.selected {
+  background: #edc078;
+  color: #261e12;
+  border-color: #543d1c;
+}
+.reference-region-label:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.reference-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0 12px;
+  color: #8e7f67;
+  font: 8px/1.6 var(--mono);
+  letter-spacing: 0.06em;
+}
+.reference-caption > span:first-child {
+  color: #baa27e;
+}
+@media (max-width: 560px) {
+  .tune-empty-art.region-reference-art {
+    max-width: 285px;
+  }
+  .reference-region-label {
+    width: 28px;
+    height: 28px;
+    font-size: 9px;
+  }
+  .reference-center strong {
+    font-size: 31px;
+  }
+  .reference-center small {
+    font-size: 6px;
+  }
+  .reference-center span {
+    font-size: 7px;
+  }
+  .reference-caption {
+    font-size: 7px;
+  }
+}
